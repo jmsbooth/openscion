@@ -131,7 +131,7 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
                 "  openscion snapshot materialize [--json] <repo> <s1_ID> <new-directory>\n",
                 "JSON errors are stable and do not include filesystem paths.\n",
             ),
-            r#"{"ok":true,"command":"help","implemented":["help","version","doctor","init","status"]}"#,
+            r#"{"ok":true,"command":"help","implemented":["help","version","doctor","init","status","blob put","blob verify","snapshot put","snapshot show","snapshot materialize"]}"#,
         )),
         ["--version"] | ["version"] => Ok(Reply::new(
             format!("openscion {}", env!("CARGO_PKG_VERSION")),
@@ -143,7 +143,7 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
         ["doctor"] => Ok(Reply::new(
             concat!(
                 "OpenScion local-only bootstrap\n",
-                "Implemented: init, status, blob put/verify, snapshot put/show/materialize\\n",
+                "Implemented: init, status, blob put/verify, snapshot put/show/materialize\n",
                 "Pending: propose, verify, promote, rollback\n",
                 "Storage: local format marker only (no revision storage)\n",
             ),
