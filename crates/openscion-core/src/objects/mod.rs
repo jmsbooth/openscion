@@ -4,11 +4,13 @@
 //! revision system, authorization service or provenance mechanism.
 
 mod identity;
+mod changes;
 mod safe_path;
 mod snapshot;
 mod store;
 
 pub use identity::{ObjectId, ObjectKind};
+pub use changes::{ChangeError, ChangeErrorKind, Proposal, Revision, MAX_ANCESTRY_DEPTH, MAX_PROPOSAL_BYTES, MAX_REVISION_BYTES};
 pub use snapshot::{Snapshot, SnapshotEntry};
 pub use store::ObjectStore;
 
