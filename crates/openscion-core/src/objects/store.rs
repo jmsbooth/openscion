@@ -181,7 +181,7 @@ impl ObjectStore {
         Ok(())
     }
 
-    fn put_object(&self, kind: ObjectKind, bytes: &[u8]) -> Result<ObjectId, ObjectError> {
+    pub(crate) fn put_object(&self, kind: ObjectKind, bytes: &[u8]) -> Result<ObjectId, ObjectError> {
         let limit = object_limit(kind);
         if bytes.len() > limit {
             return Err(ObjectError::new(
@@ -239,7 +239,7 @@ impl ObjectStore {
         Ok(())
     }
 
-    fn get_object(
+    pub(crate) fn get_object(
         &self,
         id: &ObjectId,
         required_kind: ObjectKind,
@@ -307,6 +307,8 @@ fn object_limit(kind: ObjectKind) -> usize {
     match kind {
         ObjectKind::Blob => MAX_BLOB_BYTES,
         ObjectKind::Snapshot => MAX_SNAPSHOT_BYTES,
+        ObjectKind::Proposal => super::changes::MAX_PROPOSAL_BYTES,
+        ObjectKind::Revision => super::changes::MAX_REVISION_BYTES,
     }
 }
 
