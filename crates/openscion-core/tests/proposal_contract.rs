@@ -208,3 +208,40 @@ fn invalid_grandparent_blocks_a_new_descendant_proposal() {
         ChangeErrorKind::Corrupt,
     );
 }
+
+
+#[test]
+fn independent_python_hashlib_golden_ids_match_proposal_and_revision_serialization() {
+    let fixture = Fixture::new();
+    let store = fixture.store();
+    let snapshot = store.put_snapshot(&[]).unwrap();
+    assert_eq!(
+        snapshot.to_string(),
+        "s1_0e226daee94758aaceff2b27f8033e9d3eb3462026581d79ea3d4d2bd8e17a65"
+    );
+    let p0 = store.put_proposal(
+        &Proposal::new(None, snapshot.clone(), "agent_01", "Add README\n").unwrap()
+    ).unwrap();
+    assert_eq!(
+        p0.to_string(),
+        "p1_c5c73cbbac74aff0d861a5542000e50d4c1c7a6e74568b6f37104457aa046e63"
+    );
+    let r0 = store.create_revision(&p0).unwrap();
+    assert_eq!(
+        r0.to_string(),
+        "r1_21eec06e30ee661860174671ed53e78f69192c8979839188e02e08b147c186b0"
+    );
+    let p1 = store.put_proposal(
+        &Proposal::new(Some(r0.clone()), snapshot, "agent_02", "Update doc").unwrap()
+    ).unwrap();
+    assert_eq!(
+        p1.to_string(),
+        "p1_7e8bf5d6ba3f3a52b8379a408fc4f10daaa23fbf882ad33b46b350feac2105c3"
+    );
+    let r1 = store.create_revision(&p1).unwrap();
+    assert_eq!(
+        r1.to_string(),
+        "r1_693b8563d158ad7bc9eddda09d1df70993db88fffb7cf9a8abafc8227fc4b24c"
+    );
+    assert_eq!(store.ancestry(&r1).unwrap(), vec![r1, r0]);
+}
