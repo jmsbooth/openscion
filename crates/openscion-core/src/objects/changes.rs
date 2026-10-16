@@ -262,17 +262,16 @@ impl ObjectStore {
     pub fn put_proposal(&self, proposal: &Proposal) -> Result<ObjectId, ChangeError> {
         self.get_snapshot(proposal.snapshot())?;
         if let Some(parent) = proposal.base() {
-            self.shallow_parent(parent)?;
+            self.verify_ancestry(parent)?;
         }
-        self.put_object(ObjectKind::Proposal, &proposal.encode()).map_err(Into::into)
+        self.put_object(ObjectKind::Proposal, &proposal.encode())
+            .map_err(Into::into)
     }
 
     pub fn get_proposal(&self, id: &ObjectId) -> Result<Proposal, ChangeError> {
-        let raw = self.get_object(id, ObjectKind::Proposal)?;
-        let proposal = Proposal::decode(&raw)?;
-        self.get_snapshot(proposal.snapshot())?;
+        let proposal = self.read_proposal_subject(id)?;
         if let Some(base) = proposal.base() {
-            self.shallow_parent(base)?;
+            self.verify_ancestry(base)?;
         }
         Ok(proposal)
     }
@@ -280,39 +279,60 @@ impl ObjectStore {
     pub fn create_revision(&self, proposal_id: &ObjectId) -> Result<ObjectId, ChangeError> {
         let proposal = self.get_proposal(proposal_id)?;
         let revision = Revision::from_proposal(proposal_id.clone(), &proposal);
-        self.put_object(ObjectKind::Revision, &revision.encode()).map_err(Into::into)
+        self.put_object(ObjectKind::Revision, &revision.encode())
+            .map_err(Into::into)
     }
 
     pub fn get_revision(&self, id: &ObjectId) -> Result<Revision, ChangeError> {
+        // Validate all the way to a root without recursive Rust calls.
+        self.verify_ancestry(id)?;
         let raw = self.get_object(id, ObjectKind::Revision)?;
-        let revision = Revision::decode(&raw)?;
-        let proposal = self.get_proposal(revision.proposal())?;
-        if proposal.base() != revision.parent() || proposal.snapshot() != revision.snapshot() {
-            return Err(ChangeError::new(ChangeErrorKind::InvalidRevision, "revision has mismatched proposal references"));
-        }
-        // The referenced parent is also checked when get_proposal validates its base.
-        Ok(revision)
+        Revision::decode(&raw)
     }
 
     pub fn ancestry(&self, id: &ObjectId) -> Result<Vec<ObjectId>, ChangeError> {
+        self.verify_ancestry(id)
+    }
+
+    /// Read and verify proposal bytes and candidate snapshot only; this
+    /// intentionally does not descend to the base revision. Full ancestry
+    /// verification belongs to the iterative visitor below.
+    fn read_proposal_subject(&self, id: &ObjectId) -> Result<Proposal, ChangeError> {
+        let raw = self.get_object(id, ObjectKind::Proposal)?;
+        let proposal = Proposal::decode(&raw)?;
+        self.get_snapshot(proposal.snapshot())?;
+        Ok(proposal)
+    }
+
+    /// Verify every revision and proposal binding iteratively, including
+    /// the complete parent lineage. This is bounded and rejects cycles.
+    /// It does not authenticate actor_claim or authorize promotion.
+    fn verify_ancestry(&self, start: &ObjectId) -> Result<Vec<ObjectId>, ChangeError> {
         let mut visited = HashSet::new();
         let mut chain = Vec::new();
-        let mut current = Some(id.clone());
+        let mut current = Some(start.clone());
         while let Some(next) = current {
             if chain.len() >= MAX_ANCESTRY_DEPTH || !visited.insert(next.clone()) {
-                return Err(ChangeError::new(ChangeErrorKind::InvalidRevision, "ancestor chain exceeds bound or contains a cycle"));
+                return Err(ChangeError::new(
+                    ChangeErrorKind::InvalidRevision,
+                    "ancestor chain exceeds bound or contains a cycle",
+                ));
             }
-            let revision = self.get_revision(&next)?;
+            let raw = self.get_object(&next, ObjectKind::Revision)?;
+            let revision = Revision::decode(&raw)?;
+            let proposal = self.read_proposal_subject(revision.proposal())?;
+            if proposal.base() != revision.parent()
+                || proposal.snapshot() != revision.snapshot()
+            {
+                return Err(ChangeError::new(
+                    ChangeErrorKind::InvalidRevision,
+                    "revision contains inconsistent proposal references",
+                ));
+            }
             current = revision.parent().cloned();
             chain.push(next);
         }
         Ok(chain)
-    }
-
-    fn shallow_parent(&self, parent: &ObjectId) -> Result<(), ChangeError> {
-        let bytes = self.get_object(parent, ObjectKind::Revision)?;
-        Revision::decode(&bytes)?;
-        Ok(())
     }
 }
 
