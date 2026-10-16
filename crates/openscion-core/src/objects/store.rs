@@ -162,7 +162,7 @@ impl ObjectStore {
             }
         }
 
-        sync_directory(&stage_path)?;
+        sync_directory_tree(&stage_path)?;
         // Compare again before rename, but do not claim race-free no-replace
         // against a separate malicious same-user process.
         if fs::symlink_metadata(&final_path).is_ok() {
@@ -386,6 +386,26 @@ fn read_bounded(path: &Path, limit: usize, stored: bool) -> Result<Vec<u8>, Obje
         return Err(ObjectError::new(kind, "bounded file exceeds limit"));
     }
     Ok(out)
+}
+
+/// Flush directory entries bottom-up, so a successfully published tree
+/// does not rely on unsynchronized nested directory metadata on Linux.
+fn sync_directory_tree(directory: &Path) -> Result<(), ObjectError> {
+    let children = fs::read_dir(directory)
+        .map_err(|error| ObjectError::io("enumerate staged directory", error))?;
+    for child in children {
+        let child = child.map_err(|error| ObjectError::io("inspect staged directory", error))?;
+        let attr = child
+            .file_type()
+            .map_err(|error| ObjectError::io("inspect staged entry", error))?;
+        if attr.is_symlink() {
+            return Err(unsafe_path());
+        }
+        if attr.is_dir() {
+            sync_directory_tree(&child.path())?;
+        }
+    }
+    sync_directory(directory)
 }
 
 fn sync_directory(path: &Path) -> Result<(), ObjectError> {
