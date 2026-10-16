@@ -356,3 +356,43 @@ fn no_format_marker_means_no_object_writes() {
     );
     assert!(!fixture.path().join(".openscion/objects").exists());
 }
+
+#[test]
+fn abandoned_staging_file_is_not_a_published_object() {
+    let fixture = Fixture::new();
+    let store = fixture.store();
+    let data = b"notyet";
+    let id = ObjectId::for_content(ObjectKind::Blob, data);
+    let expected_final = fixture.object_path(&id);
+    let shard = expected_final.parent().unwrap();
+    fs::create_dir_all(shard).unwrap();
+    fs::write(shard.join(".openscion-object-abandoned"), b"unverified partial").unwrap();
+    assert_eq!(
+        store.get_blob(&id).unwrap_err().kind,
+        ObjectErrorKind::Missing
+    );
+    assert_eq!(store.put_blob(data).unwrap(), id);
+    assert_eq!(store.get_blob(&id).unwrap(), data);
+    assert_eq!(
+        fs::read(shard.join(".openscion-object-abandoned")).unwrap(),
+        b"unverified partial"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn symlinked_object_shard_is_refused_even_with_valid_target_bytes() {
+    use std::os::unix::fs::symlink;
+    let fixture = Fixture::new();
+    let store = fixture.store();
+    let id = store.put_blob(b"valid").unwrap();
+    let original = fixture.object_path(&id);
+    let shard = original.parent().unwrap();
+    let moved = fixture.path().join("moved-shard");
+    fs::rename(shard, &moved).unwrap();
+    symlink(&moved, shard).unwrap();
+    assert_eq!(
+        store.get_blob(&id).unwrap_err().kind,
+        ObjectErrorKind::UnsafePath
+    );
+}
