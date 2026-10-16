@@ -180,6 +180,7 @@ fn invalid_paths_and_case_or_prefix_collisions_are_refused() {
         "a/../b",
         "a/",
         ".openscion/format",
+        ".git/config",
         "src\\win.rs",
         "a:evil",
         "con",
@@ -394,5 +395,27 @@ fn symlinked_object_shard_is_refused_even_with_valid_target_bytes() {
     assert_eq!(
         store.get_blob(&id).unwrap_err().kind,
         ObjectErrorKind::UnsafePath
+    );
+}
+
+
+#[test]
+fn decoded_snapshot_with_unsafe_path_returns_invalid_snapshot_type() {
+    let blob = ObjectId::for_content(ObjectKind::Blob, b"safe");
+    let mut raw = Vec::new();
+    raw.extend_from_slice(b"OSNAP001");
+    raw.extend_from_slice(&1u32.to_be_bytes());
+    raw.extend_from_slice(&6u16.to_be_bytes());
+    raw.extend_from_slice(b"../bad");
+    raw.push(0);
+    let text = blob.to_string();
+    let mut digest = [0u8; 32];
+    for i in 0..32 {
+        digest[i] = u8::from_str_radix(&text[(3 + 2*i)..(5 + 2*i)],16).unwrap();
+    }
+    raw.extend_from_slice(&digest);
+    assert_eq!(
+        Snapshot::decode(&raw).unwrap_err().kind,
+        ObjectErrorKind::InvalidSnapshot
     );
 }
