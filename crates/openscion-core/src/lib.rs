@@ -122,6 +122,17 @@ fn validate_directory(path: &Path) -> Result<PathBuf, StoreError> {
         ));
     }
 
+    // Windows drive-relative paths (for example "C:relative") resolve
+    // against drive-specific process state and must not be accepted.
+    if !path.is_absolute()
+        && matches!(path.components().next(), Some(Component::Prefix(_)))
+    {
+        return Err(StoreError::new(
+            ErrorCode::UnsafePath,
+            "drive-relative repository paths are forbidden",
+        ));
+    }
+
     let full = if path.is_absolute() {
         path.to_path_buf()
     } else {
