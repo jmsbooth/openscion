@@ -87,6 +87,25 @@ pub struct RepositoryInfo {
     pub state: RepositoryState,
 }
 
+/// Reject both symbolic links and Windows junction/reparse points.
+///
+/// A reparse point can appear directory-like without being classified by
+/// FileType::is_symlink on Windows.
+fn is_link_like(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return true;
+        }
+    }
+    false
+}
+
 /// Reject lexical traversal and symlinks in every existing path component.
 ///
 /// This checks the namespace at the time of inspection. A hostile local
@@ -139,7 +158,7 @@ fn validate_directory(path: &Path) -> Result<PathBuf, StoreError> {
             }
             Err(error) => return Err(StoreError::io("inspect repository path", error)),
         };
-        if attributes.file_type().is_symlink() {
+        if is_link_like(&attributes) {
             return Err(StoreError::new(
                 ErrorCode::UnsafePath,
                 "repository path contains a symbolic link",
@@ -166,6 +185,7 @@ pub fn initialize_repository(path: &Path) -> Result<RepositoryInfo, StoreError> 
     let metadata_dir = root.join(".openscion");
 
     let mut builder = fs::DirBuilder::new();
+    builder.recursive(false);
     #[cfg(unix)]
     {
         use std::os::unix::fs::DirBuilderExt;
@@ -175,7 +195,7 @@ pub fn initialize_repository(path: &Path) -> Result<RepositoryInfo, StoreError> 
     if let Err(error) = builder.create(&metadata_dir) {
         if error.kind() == ErrorKind::AlreadyExists {
             if let Ok(attributes) = fs::symlink_metadata(&metadata_dir) {
-                if attributes.file_type().is_symlink() {
+                if is_link_like(&attributes) {
                     return Err(StoreError::new(
                         ErrorCode::UnsafePath,
                         "repository metadata path is a symbolic link",
@@ -241,7 +261,7 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
         Err(error) => return Err(StoreError::io("inspect metadata directory", error)),
     };
 
-    if metadata.file_type().is_symlink() {
+    if is_link_like(&metadata) {
         return Err(StoreError::new(
             ErrorCode::UnsafePath,
             "metadata directory is a symbolic link",
@@ -265,7 +285,7 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
         }
         Err(error) => return Err(StoreError::io("inspect format marker", error)),
     };
-    if marker_metadata.file_type().is_symlink() {
+    if is_link_like(&marker_metadata) {
         return Err(StoreError::new(
             ErrorCode::UnsafePath,
             "format marker is a symbolic link",
