@@ -104,7 +104,7 @@ impl ObjectStore {
             return Err(unsafe_path());
         }
         let basename = destination.file_name().ok_or_else(unsafe_path)?;
-        if basename == "." || basename == ".." {
+        if basename == std::ffi::OsStr::new(".") || basename == std::ffi::OsStr::new("..") {
             return Err(unsafe_path());
         }
         let parent = destination.parent().filter(|p| !p.as_os_str().is_empty())
@@ -159,6 +159,9 @@ impl ObjectStore {
                 use std::os::unix::fs::PermissionsExt;
                 fs::set_permissions(&target, fs::Permissions::from_mode(0o700))
                     .map_err(|error| ObjectError::io("mark executable", error))?;
+                File::open(&target)
+                    .and_then(|opened| opened.sync_all())
+                    .map_err(|error| ObjectError::io("sync executable mode", error))?;
             }
         }
 
