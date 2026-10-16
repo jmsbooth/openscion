@@ -174,8 +174,7 @@ impl ObjectStore {
                 "materialization destination changed during write",
             ));
         }
-        fs::rename(&stage_path, &final_path)
-            .map_err(|error| ObjectError::io("publish materialized directory", error))?;
+        publish_directory_noreplace(&stage_path, &final_path)?;
         guard.0 = None;
         sync_directory(&safe_parent)?;
         Ok(())
@@ -301,6 +300,86 @@ impl Drop for DirectoryCleanup {
             fs::remove_dir_all(path).ok();
         }
     }
+}
+
+// Atomic destination-existence enforcement is essential. A pre-check
+// followed by std::fs::rename() can overwrite an empty directory when
+// another local process races publication. Unsupported platforms fail closed.
+#[cfg(target_os = "linux")]
+fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), ObjectError> {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    use std::os::raw::{c_char, c_int};
+
+    const AT_FDCWD: c_int = -100;
+    const RENAME_NOREPLACE: u32 = 1;
+    extern "C" {
+        fn renameat2(
+            olddirfd: c_int,
+            oldpath: *const c_char,
+            newdirfd: c_int,
+            newpath: *const c_char,
+            flags: u32,
+        ) -> c_int;
+    }
+    let src = CString::new(source.as_os_str().as_bytes())
+        .map_err(|_| unsafe_path())?;
+    let dst = CString::new(target.as_os_str().as_bytes())
+        .map_err(|_| unsafe_path())?;
+    // SAFETY: CString arguments are terminated and live across the call.
+    // This syscall does not dereference Rust-managed memory after returning.
+    let result = unsafe {
+        renameat2(
+            AT_FDCWD,
+            src.as_ptr(),
+            AT_FDCWD,
+            dst.as_ptr(),
+            RENAME_NOREPLACE,
+        )
+    };
+    if result == 0 {
+        return Ok(());
+    }
+    let error = std::io::Error::last_os_error();
+    if error.kind() == ErrorKind::AlreadyExists {
+        return Err(ObjectError::new(
+            ObjectErrorKind::AlreadyExists,
+            "materialization destination already exists",
+        ));
+    }
+    Err(ObjectError::io("publish directory without overwrite", error))
+}
+
+#[cfg(windows)]
+fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), ObjectError> {
+    use std::os::windows::ffi::OsStrExt;
+    extern "system" {
+        fn MoveFileW(existing_name: *const u16, new_name: *const u16) -> i32;
+    }
+    let source_wide: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+    let target_wide: Vec<u16> = target.as_os_str().encode_wide().chain(Some(0)).collect();
+    // SAFETY: Both terminated UTF-16 buffers remain allocated throughout
+    // the synchronous Win32 call. MoveFileW refuses existing destinations.
+    let result = unsafe { MoveFileW(source_wide.as_ptr(), target_wide.as_ptr()) };
+    if result != 0 {
+        return Ok(());
+    }
+    let error = std::io::Error::last_os_error();
+    if error.kind() == ErrorKind::AlreadyExists {
+        return Err(ObjectError::new(
+            ObjectErrorKind::AlreadyExists,
+            "materialization destination already exists",
+        ));
+    }
+    Err(ObjectError::io("publish directory without overwrite", error))
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn publish_directory_noreplace(_source: &Path, _target: &Path) -> Result<(), ObjectError> {
+    Err(ObjectError::new(
+        ObjectErrorKind::Io,
+        "atomic no-overwrite directory publication unavailable on this platform",
+    ))
 }
 
 fn object_limit(kind: ObjectKind) -> usize {
