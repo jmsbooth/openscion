@@ -184,3 +184,27 @@ fn proposal_without_valid_store_is_refused(){
     let p=Proposal::new(None,snapshot,"agent","No store").unwrap();
     assert_eq!(store.put_proposal(&p).unwrap_err().kind,ChangeErrorKind::InvalidStore);
 }
+
+
+#[test]
+fn invalid_grandparent_blocks_a_new_descendant_proposal() {
+    let f = Fixture::new();
+    let store = f.store();
+    let snapshot = store.put_snapshot(&[]).unwrap();
+    let root_proposal = store.put_proposal(
+        &Proposal::new(None, snapshot.clone(), "root", "Start").unwrap()
+    ).unwrap();
+    let root = store.create_revision(&root_proposal).unwrap();
+    let child_proposal = store.put_proposal(
+        &Proposal::new(Some(root.clone()), snapshot.clone(), "child", "Continue").unwrap()
+    ).unwrap();
+    let child = store.create_revision(&child_proposal).unwrap();
+
+    fs::write(f.object_path(&root), b"tampered ancestor").unwrap();
+    assert_eq!(
+        store.put_proposal(
+            &Proposal::new(Some(child), snapshot, "agent", "Should fail").unwrap()
+        ).unwrap_err().kind,
+        ChangeErrorKind::Corrupt,
+    );
+}
