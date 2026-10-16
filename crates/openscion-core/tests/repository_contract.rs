@@ -177,3 +177,23 @@ fn inspect_rejects_symlink_metadata_and_marker() {
         ErrorCode::UnsafePath
     );
 }
+
+#[test]
+fn empty_repository_path_is_rejected() {
+    assert_eq!(
+        initialize_repository(Path::new("")).unwrap_err().code,
+        ErrorCode::UnsafePath
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn metadata_directory_has_owner_only_permissions() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = Fixture::new();
+    initialize_repository(root.path()).unwrap();
+    let metadata_path = root.path().join(".openscion");
+    let permissions = fs::metadata(&metadata_path).unwrap().permissions().mode();
+    assert_eq!(permissions & 0o077, 0, "metadata must not grant group/other access");
+    assert!(!metadata_path.join("format.pending").exists());
+}
