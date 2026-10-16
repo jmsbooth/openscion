@@ -104,7 +104,7 @@ impl Snapshot {
 
         // Re-encoding also verifies strictly canonical byte-order and
         // path normalization. A reordered manifest is NOT silently accepted.
-        let snapshot = Self::new(&entries)?;
+        let snapshot = Self::new(&entries).map_err(|_| invalid_snapshot())?;
         if snapshot.encode().as_slice() != input {
             return Err(invalid_snapshot());
         }
