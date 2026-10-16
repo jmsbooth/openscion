@@ -1,7 +1,7 @@
 //! OpenScion M1 increment 1 CLI. No source-control changes are supported yet.
 
 use openscion_core::{initialize_repository, inspect_repository, StoreError};
-use openscion_core::objects::{ObjectError, ObjectId, ObjectStore, SnapshotEntry, MAX_SNAPSHOT_BYTES};
+use openscion_core::objects::{ChangeError, ObjectError, ObjectId, ObjectStore, Proposal, SnapshotEntry, MAX_PROPOSAL_BYTES, MAX_SNAPSHOT_BYTES};
 use std::env;
 use std::path::Path;
 use std::process::ExitCode;
@@ -32,6 +32,16 @@ impl CliFailure {
             code: "E_USAGE",
             status: 2,
             message: message.into(),
+        }
+    }
+}
+
+impl From<ChangeError> for CliFailure {
+    fn from(failure: ChangeError) -> Self {
+        Self {
+            code: failure.kind.code(),
+            status: failure.kind.exit_code(),
+            message: failure.message,
         }
     }
 }
@@ -129,9 +139,14 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
                 "  openscion snapshot put [--json] <repo> <repo-relative-manifest.tsv>\n",
                 "  openscion snapshot show [--json] <repo> <s1_ID>\n",
                 "  openscion snapshot materialize [--json] <repo> <s1_ID> <new-directory>\n",
+                "  openscion proposal create <repo> <root|r1_ID> <s1_ID> <actor> <intent-file>\n",
+                "  openscion proposal show <repo> <p1_ID>\n",
+                "  openscion revision create <repo> <p1_ID>\n",
+                "  openscion revision show <repo> <r1_ID>\n",
+                "  openscion revision ancestry <repo> <r1_ID>\n",
                 "JSON errors are stable and do not include filesystem paths.\n",
             ),
-            r#"{"ok":true,"command":"help","implemented":["help","version","doctor","init","status","blob put","blob verify","snapshot put","snapshot show","snapshot materialize"]}"#,
+            r#"{"ok":true,"command":"help","implemented":["help","version","doctor","init","status","blob put","blob verify","snapshot put","snapshot show","snapshot materialize","proposal create","proposal show","revision create","revision show","revision ancestry"]}"#,
         )),
         ["--version"] | ["version"] => Ok(Reply::new(
             format!("openscion {}", env!("CARGO_PKG_VERSION")),
@@ -144,10 +159,10 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
             concat!(
                 "OpenScion local-only bootstrap\n",
                 "Implemented: init, status, blob put/verify, snapshot put/show/materialize\n",
-                "Pending: propose, verify, promote, rollback\n",
+                "Pending: promote, rollback\n",
                 "Storage: local format marker only (no revision storage)\n",
             ),
-            r#"{"ok":true,"command":"doctor","implemented":["init","status","blob put","blob verify","snapshot put","snapshot show","snapshot materialize"],"pending":["propose","promote","rollback"],"storage":"local-cas-v1"}"#,
+            r#"{"ok":true,"command":"doctor","implemented":["init","status","blob put","blob verify","snapshot put","snapshot show","snapshot materialize","proposal create","proposal show","revision create","revision show","revision ancestry"],"pending":["promote","rollback"],"storage":"local-cas-v1"}"#,
         )),
         ["init"] => bootstrap("init", "."),
         ["init", path] => bootstrap("init", path),
@@ -158,6 +173,11 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
         ["snapshot", "put", repo, manifest] => snapshot_put(repo, manifest),
         ["snapshot", "show", repo, id] => snapshot_show(repo, id),
         ["snapshot", "materialize", repo, id, target] => snapshot_materialize(repo, id, target),
+        ["proposal", "create", repo, base, snapshot, actor, intent] => proposal_create(repo, base, snapshot, actor, intent),
+        ["proposal", "show", repo, id] => proposal_show(repo, id),
+        ["revision", "create", repo, proposal] => revision_create(repo, proposal),
+        ["revision", "show", repo, id] => revision_show(repo, id),
+        ["revision", "ancestry", repo, id] => revision_ancestry(repo, id),
         _ => Err(CliFailure::usage(
             "unsupported command or invalid number of arguments; see --help",
         )),
@@ -274,4 +294,108 @@ fn snapshot_materialize(repo: &str, raw_id: &str, destination: &str) -> Result<R
         "Materialized verified snapshot into new directory",
         format!(r#"{{"ok":true,"command":"snapshot materialize","id":"{id}"}}"#),
     ))
+}
+
+
+fn proposal_create(
+    repo: &str,
+    raw_base: &str,
+    raw_snapshot: &str,
+    actor: &str,
+    intent_file: &str,
+) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let base = if raw_base == "root" {
+        None
+    } else {
+        Some(ObjectId::parse(raw_base)?)
+    };
+    let snapshot = ObjectId::parse(raw_snapshot)?;
+    let bytes = store.read_repo_file(intent_file, MAX_PROPOSAL_BYTES)?;
+    let intent = std::str::from_utf8(&bytes)
+        .map_err(|_| CliFailure::usage("intent file is not valid UTF-8"))?;
+    let proposed = Proposal::new(base, snapshot, actor, intent)?;
+    let id = store.put_proposal(&proposed)?;
+    Ok(Reply::new(
+        format!("Created immutable proposal {id} (UNVERIFIED actor claim)"),
+        format!(r#"{{"ok":true,"command":"proposal create","id":"{id}","actor_verified":false}}"#),
+    ))
+}
+
+fn proposal_show(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let id = ObjectId::parse(raw_id)?;
+    let proposal = store.get_proposal(&id)?;
+    let base = proposal.base().map(ToString::to_string);
+    let parent_text = base.as_deref().unwrap_or("root");
+    let json_parent = base.as_ref()
+        .map(|parent| format!(r#""{parent}""#))
+        .unwrap_or_else(|| "null".to_owned());
+    Ok(Reply::new(
+        format!("Proposal {id}\nbase: {parent_text}\nsnapshot: {}\nactor (UNVERIFIED): {}\nintent:\n{}\n",
+                proposal.snapshot(),proposal.actor_claim(),proposal.intent()),
+        format!(r#"{{"ok":true,"command":"proposal show","id":"{id}","base":{json_parent},"snapshot":"{}","actor_claim":"{}","actor_verified":false,"intent":"{}"}}"#,
+                proposal.snapshot(),proposal.actor_claim(),json_escape(proposal.intent())),
+    ))
+}
+
+fn revision_create(repo: &str, raw_proposal: &str) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let proposal = ObjectId::parse(raw_proposal)?;
+    let id = store.create_revision(&proposal)?;
+    Ok(Reply::new(
+        format!("Created unpromoted revision {id}"),
+        format!(r#"{{"ok":true,"command":"revision create","id":"{id}","promoted":false}}"#),
+    ))
+}
+
+fn revision_show(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let id = ObjectId::parse(raw_id)?;
+    let revision = store.get_revision(&id)?;
+    let parent = revision.parent().map(ToString::to_string);
+    let parent_text = parent.as_deref().unwrap_or("root");
+    let json_parent = parent.as_ref()
+        .map(|parent| format!(r#""{parent}""#))
+        .unwrap_or_else(|| "null".to_owned());
+    Ok(Reply::new(
+        format!("Revision {id}\nparent: {parent_text}\nsnapshot: {}\nproposal: {}\npromoted: false",
+                revision.snapshot(), revision.proposal()),
+        format!(r#"{{"ok":true,"command":"revision show","id":"{id}","parent":{json_parent},"snapshot":"{}","proposal":"{}","promoted":false}}"#,
+                revision.snapshot(),revision.proposal()),
+    ))
+}
+
+fn revision_ancestry(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let id = ObjectId::parse(raw_id)?;
+    let chain = store.ancestry(&id)?;
+    let human = chain.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n");
+    let json = chain.iter().map(|id| format!(r#""{id}""#)).collect::<Vec<_>>().join(",");
+    Ok(Reply::new(
+        human,
+        format!(r#"{{"ok":true,"command":"revision ancestry","revisions":[{json}]}}"#),
+    ))
+}
+
+/// Minimal, explicit JSON string escaping for untrusted UTF-8 intent strings.
+/// No author-provided string is interpolated into JSON without this function
+/// except actor claim, which uses a strict ASCII identifier grammar.
+fn json_escape(source: &str) -> String {
+    let mut out = String::new();
+    for c in source.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c <= '\u{1f}' => {
+                use std::fmt::Write;
+                write!(&mut out, "\\u{:04x}", c as u32).expect("String write cannot fail");
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
