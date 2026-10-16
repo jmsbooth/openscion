@@ -197,3 +197,14 @@ fn metadata_directory_has_owner_only_permissions() {
     assert_eq!(permissions & 0o077, 0, "metadata must not grant group/other access");
     assert!(!metadata_path.join("format.pending").exists());
 }
+
+#[cfg(windows)]
+#[test]
+fn windows_drive_relative_input_fails_closed() {
+    assert_eq!(
+        initialize_repository(Path::new("C:relative"))
+            .unwrap_err()
+            .code,
+        ErrorCode::UnsafePath
+    );
+}
