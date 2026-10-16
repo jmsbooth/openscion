@@ -62,8 +62,8 @@ fn help_version_and_doctor_only_advertise_implemented_commands() {
 
     let doctor = invoke(&["doctor", "--json"]);
     assert!(doctor.status.success());
-    assert!(stdout(&doctor).contains(r#""implemented":["init","status"]"#));
-    assert!(stdout(&doctor).contains(r#""pending":["propose","verify","promote","rollback"]"#));
+    assert!(stdout(&doctor).contains(r#""implemented":["init","status","blob put","blob verify""#));
+    assert!(stdout(&doctor).contains(r#""pending":["propose","promote","rollback"]"#));
 }
 
 #[test]
