@@ -199,8 +199,10 @@ impl ObjectStore {
 
         let parent = path.parent().ok_or_else(unsafe_path)?;
         let staging = parent.join(temp_name("object"));
-        let mut cleanup = FileCleanup(staging.clone());
+        // Only own/remove a stage after exclusive creation succeeds. A
+        // collided name must never cause deletion of somebody else's file.
         let mut file = create_private_file(&staging)?;
+        let mut cleanup = FileCleanup(staging.clone());
         file.write_all(bytes)
             .map_err(|error| ObjectError::io("write staging object", error))?;
         file.sync_all()
