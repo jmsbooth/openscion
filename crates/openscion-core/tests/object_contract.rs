@@ -282,10 +282,12 @@ fn materialize_round_trips_content_and_never_overwrites() {
         fs::read(target.join("scripts/test.sh")).unwrap(),
         b"#!/bin/sh\necho fine\n"
     );
+    let before = fs::read(target.join("src/main.rs")).unwrap();
     assert_eq!(
         store.materialize(&id, &target).unwrap_err().kind,
         ObjectErrorKind::AlreadyExists
     );
+    assert_eq!(fs::read(target.join("src/main.rs")).unwrap(), before);
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
