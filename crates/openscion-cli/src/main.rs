@@ -143,11 +143,11 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
         ["doctor"] => Ok(Reply::new(
             concat!(
                 "OpenScion local-only bootstrap\n",
-                "Implemented: init, status\n",
+                "Implemented: init, status, blob put/verify, snapshot put/show/materialize\\n",
                 "Pending: propose, verify, promote, rollback\n",
                 "Storage: local format marker only (no revision storage)\n",
             ),
-            r#"{"ok":true,"command":"doctor","implemented":["init","status"],"pending":["propose","verify","promote","rollback"],"storage":"local-bootstrap"}"#,
+            r#"{"ok":true,"command":"doctor","implemented":["init","status","blob put","blob verify","snapshot put","snapshot show","snapshot materialize"],"pending":["propose","promote","rollback"],"storage":"local-cas-v1"}"#,
         )),
         ["init"] => bootstrap("init", "."),
         ["init", path] => bootstrap("init", path),
@@ -212,11 +212,11 @@ fn snapshot_put(repo: &str, manifest: &str) -> Result<Reply, CliFailure> {
     let data = std::str::from_utf8(&bytes)
         .map_err(|_| CliFailure::usage("manifest must be UTF-8"))?;
     let mut entries = Vec::new();
-    for (index, line) in data.split('\n').enumerate() {
+    if !data.is_empty() && !data.ends_with('\n') {
+        return Err(CliFailure::usage("manifest must end with LF"));
+    }
+    for line in data.split_terminator('\n') {
         if line.is_empty() {
-            if index == data.lines().count() && data.ends_with('\n') || data.is_empty() {
-                continue;
-            }
             return Err(CliFailure::usage("empty manifest line"));
         }
         let columns: Vec<&str> = line.split('\t').collect();
