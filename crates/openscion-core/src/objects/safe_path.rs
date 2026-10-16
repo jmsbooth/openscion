@@ -27,7 +27,8 @@ pub(crate) fn validate_path(path: &str) -> Result<(), ObjectError> {
         {
             return Err(unsafe_path());
         }
-        if index == 0 && component.eq_ignore_ascii_case(".openscion") {
+        if index == 0 && (component.eq_ignore_ascii_case(".openscion")
+            || component.eq_ignore_ascii_case(".git")) {
             return Err(unsafe_path());
         }
 
