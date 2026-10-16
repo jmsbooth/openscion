@@ -134,3 +134,18 @@ fn source_control_operations_are_deliberately_unimplemented() {
     assert_eq!(stdout(&result).trim(), r#"{"ok":false,"code":"E_USAGE"}"#);
     assert!(!root.path().join(".openscion").exists());
 }
+
+#[cfg(unix)]
+#[test]
+fn non_utf8_input_is_rejected_without_echoing_untrusted_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+    let out = Command::new(env!("CARGO_BIN_EXE_openscion"))
+        .arg("--json")
+        .arg(OsString::from_vec(vec![0xff]))
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(stdout(&out).trim(), r#"{"ok":false,"code":"E_USAGE"}"#);
+    assert!(stderr(&out).is_empty());
+}
