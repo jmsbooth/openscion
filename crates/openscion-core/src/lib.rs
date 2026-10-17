@@ -5,9 +5,14 @@
 //! directory was initialized with a recognized version.
 
 use std::fmt;
-use std::fs::{self, File, OpenOptions};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Component, Path, PathBuf};
+
+#[cfg(windows)]
+pub(crate) mod windows_security;
 
 /// Canonical local format marker; the trailing newline is part of the format.
 pub const FORMAT_MARKER: &[u8] = b"openscion.local-store/1\n";
@@ -196,15 +201,21 @@ pub fn initialize_repository(path: &Path) -> Result<RepositoryInfo, StoreError> 
     let root = validate_directory(path)?;
     let metadata_dir = root.join(".openscion");
 
-    let mut builder = fs::DirBuilder::new();
-    builder.recursive(false);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
+    #[cfg(windows)]
+    let creation = windows_security::create_private_directory(&metadata_dir);
+    #[cfg(not(windows))]
+    let creation = {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(&metadata_dir)
+    };
 
-    if let Err(error) = builder.create(&metadata_dir) {
+    if let Err(error) = creation {
         if error.kind() == ErrorKind::AlreadyExists {
             if let Ok(attributes) = fs::symlink_metadata(&metadata_dir) {
                 if is_link_like(&attributes) {
@@ -224,13 +235,21 @@ pub fn initialize_repository(path: &Path) -> Result<RepositoryInfo, StoreError> 
 
     let temporary_marker = metadata_dir.join("format.pending");
     let marker = metadata_dir.join("format");
+    #[cfg(not(windows))]
     let mut marker_options = OpenOptions::new();
-    marker_options.write(true).create_new(true);
-    #[cfg(unix)]
+    #[cfg(not(windows))]
     {
-        use std::os::unix::fs::OpenOptionsExt;
-        marker_options.mode(0o600);
+        marker_options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            marker_options.mode(0o600);
+        }
     }
+    #[cfg(windows)]
+    let mut stream = windows_security::create_private_file(&temporary_marker)
+        .map_err(|error| StoreError::io("create private format marker staging file", error))?;
+    #[cfg(not(windows))]
     let mut stream = marker_options
         .open(&temporary_marker)
         .map_err(|error| StoreError::io("create format marker staging file", error))?;
@@ -306,6 +325,13 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
             ));
         }
     }
+    #[cfg(windows)]
+    windows_security::verify_private_acl(&metadata_dir).map_err(|_| {
+        StoreError::new(
+            ErrorCode::InvalidStore,
+            "metadata directory DACL is not private",
+        )
+    })?;
 
     let marker = metadata_dir.join("format");
     let marker_metadata = match fs::symlink_metadata(&marker) {
@@ -340,6 +366,10 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
             ));
         }
     }
+    #[cfg(windows)]
+    windows_security::verify_private_acl(&marker).map_err(|_| {
+        StoreError::new(ErrorCode::InvalidStore, "format marker DACL is not private")
+    })?;
 
     // Limit reads even if a malicious writer expands the file after stat.
     let mut bytes = Vec::new();

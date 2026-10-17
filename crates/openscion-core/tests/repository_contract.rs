@@ -282,3 +282,48 @@ fn inspect_refuses_permissive_format_marker() {
         RepositoryState::Unborn
     );
 }
+
+#[cfg(windows)]
+fn grant_everyone_modify(path: &Path) {
+    use std::process::Command;
+    // TEST ONLY. Production Rust must never shell out to icacls for security.
+    let result = Command::new("icacls.exe")
+        .arg(path)
+        .arg("/grant")
+        .arg("*S-1-1-0:(M)")
+        .output()
+        .expect("native Windows icacls executable must be available");
+    assert!(
+        result.status.success(),
+        "could not inject permissive DACL: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_metadata_dacl_does_not_allow_everyone_modify() {
+    let root = Fixture::new();
+    initialize_repository(root.path()).expect("create protected metadata");
+    assert!(inspect_repository(root.path()).is_ok());
+    grant_everyone_modify(&root.path().join(".openscion"));
+    assert_eq!(
+        inspect_repository(root.path()).unwrap_err().code,
+        ErrorCode::InvalidStore,
+        "broader metadata permissions must fail closed on NTFS"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_marker_dacl_does_not_allow_everyone_modify() {
+    let root = Fixture::new();
+    initialize_repository(root.path()).expect("create protected marker");
+    assert!(inspect_repository(root.path()).is_ok());
+    grant_everyone_modify(&root.path().join(".openscion/format"));
+    assert_eq!(
+        inspect_repository(root.path()).unwrap_err().code,
+        ErrorCode::InvalidStore,
+        "broad marker DACL must fail closed on NTFS"
+    );
+}
