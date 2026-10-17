@@ -19,7 +19,7 @@ pub(crate) fn validate_path(path: &str) -> Result<(), ObjectError> {
     if components.len() > 64 {
         return Err(unsafe_path());
     }
-    for (index, component) in components.iter().enumerate() {
+    for component in &components {
         if component.is_empty()
             || *component == "."
             || *component == ".."
@@ -27,8 +27,11 @@ pub(crate) fn validate_path(path: &str) -> Result<(), ObjectError> {
         {
             return Err(unsafe_path());
         }
-        if index == 0 && (component.eq_ignore_ascii_case(".openscion")
-            || component.eq_ignore_ascii_case(".git")) {
+        // Prevent embedded source-control metadata from being materialized
+        // into an agent workspace, not just metadata at repository root.
+        if component.eq_ignore_ascii_case(".openscion")
+            || component.eq_ignore_ascii_case(".git")
+        {
             return Err(unsafe_path());
         }
 
