@@ -23,8 +23,8 @@ if ($Drive.DriveFormat -ne 'NTFS') { throw "NOT_RUN: NTFS required; found $($Dri
 $script:Results = [Collections.Generic.List[object]]::new()
 $script:Failures = [Collections.Generic.List[string]]::new()
 $Fixture = Join-Path $Artifacts 'fixture'
-New-Item -ItemType Directory -LiteralPath $Fixture | Out-Null
-New-Item -ItemType Directory -LiteralPath (Join-Path $Fixture 'src') | Out-Null
+New-Item -ItemType Directory -Path $Fixture | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $Fixture 'src') | Out-Null
 $Source = Join-Path $Fixture 'src\main.rs'
 [IO.File]::WriteAllBytes($Source,[Text.Encoding]::UTF8.GetBytes("fn main() {}" + [char]10))
 $Meta = Join-Path $Fixture '.openscion'
@@ -64,7 +64,8 @@ function Test-DACL {
     try {
         $modified = Get-Acl -LiteralPath $Path
         $everyone = [Security.Principal.SecurityIdentifier]::new('S-1-1-0')
-        $inherit = [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor [Security.AccessControl.InheritanceFlags]::ObjectInherit
+        # Modify only this fixture path; never propagate a test ACE to children.
+        $inherit = [Security.AccessControl.InheritanceFlags]::None
         $rule = [Security.AccessControl.FileSystemAccessRule]::new(
             $everyone,[Security.AccessControl.FileSystemRights]::Modify,
             $inherit,[Security.AccessControl.PropagationFlags]::None,
