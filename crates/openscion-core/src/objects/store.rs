@@ -6,9 +6,9 @@ use super::{
     MAX_SNAPSHOT_MATERIALIZED_BYTES,
 };
 use crate::{inspect_repository, is_link_like, validate_directory, ErrorCode};
-use std::fs::{self, File};
 #[cfg(not(windows))]
 use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
