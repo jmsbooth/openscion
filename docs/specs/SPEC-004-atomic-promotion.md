@@ -74,10 +74,10 @@ M1 deliberately forbids:
 ## 6. Transaction ordering and linearization
 
 1. Authenticate caller; parse/bound/canonicalize input, derive request fingerprint.
-2. Independently verify candidate r1, proposal, full ancestor chain, snapshot and all referenced blobs in authority-controlled immutable storage.
-3. Obtain a verified externally signed evidence decision from **trusted** verifier/trust roots; validate its binding and current time with revocation data. This stage must not modify the authoritative channel.
-4. Begin the exclusive write transaction. Read channel state, policy epoch, issuer revocations, idempotency record and nonce table from the authoritative transaction snapshot.
-5. Check idempotency: same authenticated subject/key/fingerprint -> read and independently verify prior receipt, return without mutation. Same key with different fingerprint -> E_IDEMPOTENCY_CONFLICT.
+2. **Read-only retry recovery**: look up idempotency under (authenticated subject, channel, key). If the stored fingerprint matches, independently verify the committed receipt and return it with \`OK_IDEMPOTENT\`; no new authorization or promotion occurs. An identical retry remains recoverable after the original authorization expires or is revoked. If the fingerprint differs, fail \`E_IDEMPOTENCY_CONFLICT\`. Malformed/audit-corrupt state must fail closed. This step does **not** skip caller authentication.
+3. For a previously unseen key, independently verify candidate r1, proposal, full ancestor chain, snapshot and all referenced blobs in authority-controlled immutable storage.
+4. Obtain a verified externally signed evidence decision from **trusted** verifier/trust roots; validate its binding and current time with revocation data. This stage must not modify the authoritative channel.
+5. Begin the exclusive write transaction. Read channel state, policy epoch, issuer revocations, idempotency record and nonce table from the authoritative transaction snapshot. **Repeat idempotency resolution inside the transaction** to close races with another successfully committing writer; return a matching prior receipt without a new state transition.
 6. Check the server-assigned channel policy/trust epoch against the signed evidence and compare \`expected_head\` to current head. Require the candidate's immediate parent equals current head (or parent=null for channel genesis) and verify no sequence overflow.
 7. Atomically insert canonical promotion receipt, update channel head/sequence/last_receipt, write idempotency binding and consume issuer nonce in the **same transaction**. No external file write between these steps.
 8. Commit with immediate/durable semantics. The API MUST NOT report success until durable commit returns OK and the receipt can be read back and verified. If the commit result is ambiguous (I/O failure or process loss), the caller retries with identical idempotency key and the system resolves against durable state.
@@ -117,6 +117,7 @@ Machine-readable denied responses disclose only stable codes, not signer secrets
 | PROM-016 | Full prior FOSS-387/388/389 regression suite passes locally without GitHub CI |
 | PROM-017 | Attempt to run two authorities on one DB path results in exclusive-authority enforcement; no split brain |
 | PROM-018 | Signed receipt or external anchor limitations documented and explicitly tested against forged/recomputed local logs |
+| PROM-019 | Identical accepted retry after signer expiry/revocation returns prior verified receipt with no write; different fingerprint/subject fails, no new acceptance |
 
 ## 9. Local execution / evidence requirements
 
