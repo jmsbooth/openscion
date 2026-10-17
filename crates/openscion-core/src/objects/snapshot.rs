@@ -1,6 +1,6 @@
 use super::identity::{ObjectId, ObjectKind};
 use super::safe_path::validate_entry_paths;
-use super::{ObjectError, ObjectErrorKind, MAX_SNAPSHOT_BYTES};
+use super::{ObjectError, ObjectErrorKind, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_ENTRIES};
 
 const MAGIC: &[u8; 8] = b"OSNAP001";
 const HEADER_LEN: usize = 12;
@@ -23,6 +23,9 @@ pub struct Snapshot {
 
 impl Snapshot {
     pub fn new(entries: &[SnapshotEntry]) -> Result<Self, ObjectError> {
+        if entries.len() > MAX_SNAPSHOT_ENTRIES {
+            return Err(snapshot_size_error());
+        }
         validate_entry_paths(entries.iter().map(|entry| entry.path.as_str()))?;
         let mut size = HEADER_LEN;
         for entry in entries {
@@ -73,6 +76,9 @@ impl Snapshot {
         }
 
         let count = u32::from_be_bytes([input[8], input[9], input[10], input[11]]) as usize;
+        if count > MAX_SNAPSHOT_ENTRIES {
+            return Err(invalid_snapshot());
+        }
         if count > (input.len() - HEADER_LEN) / 36 {
             return Err(invalid_snapshot());
         }
