@@ -5,9 +5,9 @@
 //! directory was initialized with a recognized version.
 
 use std::fmt;
-use std::fs::{self, File};
 #[cfg(not(windows))]
 use std::fs::OpenOptions;
+use std::fs::{self, File};
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Component, Path, PathBuf};
 
@@ -327,7 +327,10 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
     }
     #[cfg(windows)]
     windows_security::verify_private_acl(&metadata_dir).map_err(|_| {
-        StoreError::new(ErrorCode::InvalidStore, "metadata directory DACL is not private")
+        StoreError::new(
+            ErrorCode::InvalidStore,
+            "metadata directory DACL is not private",
+        )
     })?;
 
     let marker = metadata_dir.join("format");
