@@ -13,7 +13,7 @@ Local immutable content-addressed blobs and canonical path-to-blob snapshots. Re
 - Snapshot digest = SHA-256(ASCII("openscion.snapshot.v1") || 0x00 || u64_BE(length) || canonical manifest bytes).
 - IDs are exactly b1_ or s1_ plus 64 lower-case hex digits. Parsing is strict and object types cannot be interchanged.
 - Storage: .openscion/objects/{b1|s1}/{first two hexadecimal digits}/{full 64-hex digest}, with type partitioning.
-- Maximum blob size 16 MiB; maximum encoded snapshot size 8 MiB.
+- Maximum blob size 16 MiB; maximum encoded snapshot size 8 MiB; **maximum 4,096 entries and 64 MiB of aggregate materialized file content per snapshot**, counting repeated references independently. Larger workloads require a versioned streaming/quotas design.
 
 ## Canonical manifest encoding
 
@@ -58,6 +58,7 @@ CAS-015: interrupted temporary write and restart do not expose partial final obj
 CAS-016: no valid store marker means no writes
 CAS-017: manual CLI inspection of object bytes, IDs, manifest and restoration
 CAS-018: existing object files or storage shards with Unix group/other permissions are rejected, remain untouched, and become readable only after permissions are restored; native Windows ACL evaluation remains a separate gate
+CAS-019: manifests with more than 4,096 entries are refused before allocation; valid-hash manifests whose referenced bytes total more than 64 MiB are rejected even if many paths reuse the same blob digest
 
 ## Validation and dependencies
 
