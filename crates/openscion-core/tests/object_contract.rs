@@ -372,6 +372,17 @@ fn abandoned_staging_file_is_not_a_published_object() {
     let expected_final = fixture.object_path(&id);
     let shard = expected_final.parent().unwrap();
     fs::create_dir_all(shard).unwrap();
+    // Fixture directories created through std::fs inherit 0755 on Unix;
+    // make them match the storage contract before testing orphan behavior.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let objects = fixture.path().join(".openscion/objects");
+        let kind = objects.join("b1");
+        for directory in [&objects, &kind, shard] {
+            fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
+        }
+    }
     fs::write(shard.join(".openscion-object-abandoned"), b"unverified partial").unwrap();
     assert_eq!(
         store.get_blob(&id).unwrap_err().kind,
