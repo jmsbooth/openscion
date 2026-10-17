@@ -293,6 +293,18 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
             "metadata path is not a directory",
         ));
     }
+    // Untrusted agents must not gain access simply because a local user
+    // accidentally changed metadata permissions. Do not auto-chmod.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o077 != 0 {
+            return Err(StoreError::new(
+                ErrorCode::InvalidStore,
+                "metadata directory must be owner-only",
+            ));
+        }
+    }
 
     let marker = metadata_dir.join("format");
     let marker_metadata = match fs::symlink_metadata(&marker) {
@@ -316,6 +328,16 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
             ErrorCode::InvalidStore,
             "format marker is invalid or oversized",
         ));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if marker_metadata.permissions().mode() & 0o077 != 0 {
+            return Err(StoreError::new(
+                ErrorCode::InvalidStore,
+                "format marker must be owner-only",
+            ));
+        }
     }
 
     // Limit reads even if a malicious writer expands the file after stat.
