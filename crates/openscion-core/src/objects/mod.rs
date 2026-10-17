@@ -3,11 +3,16 @@
 //! Only blobs and canonical path snapshots exist in v1. This is not a
 //! revision system, authorization service or provenance mechanism.
 
+mod changes;
 mod identity;
 mod safe_path;
 mod snapshot;
 mod store;
 
+pub use changes::{
+    ChangeError, ChangeErrorKind, Proposal, Revision, MAX_ANCESTRY_DEPTH, MAX_PROPOSAL_BYTES,
+    MAX_REVISION_BYTES,
+};
 pub use identity::{ObjectId, ObjectKind};
 pub use snapshot::{Snapshot, SnapshotEntry};
 pub use store::ObjectStore;
@@ -17,7 +22,7 @@ use std::fmt;
 /// Explicit allocation/persistence limits for local M1 objects.
 pub const MAX_BLOB_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_SNAPSHOT_BYTES: usize = 8 * 1024 * 1024;
-/// Conservative local MVP limits to bound reference-validation and checkout cost.
+/// Conservative local MVP limits to bound validation and checkout cost.
 pub const MAX_SNAPSHOT_ENTRIES: usize = 4096;
 pub const MAX_SNAPSHOT_MATERIALIZED_BYTES: usize = 64 * 1024 * 1024;
 

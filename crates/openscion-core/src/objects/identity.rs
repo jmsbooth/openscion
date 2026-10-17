@@ -7,6 +7,8 @@ use std::fmt;
 pub enum ObjectKind {
     Blob,
     Snapshot,
+    Proposal,
+    Revision,
 }
 
 impl ObjectKind {
@@ -14,6 +16,8 @@ impl ObjectKind {
         match self {
             Self::Blob => "b1",
             Self::Snapshot => "s1",
+            Self::Proposal => "p1",
+            Self::Revision => "r1",
         }
     }
 
@@ -21,6 +25,8 @@ impl ObjectKind {
         match self {
             Self::Blob => b"openscion.blob.v1\0",
             Self::Snapshot => b"openscion.snapshot.v1\0",
+            Self::Proposal => b"openscion.proposal.v1\0",
+            Self::Revision => b"openscion.revision.v1\0",
         }
     }
 }
@@ -60,6 +66,8 @@ impl ObjectId {
         let kind = match input.get(..3) {
             Some("b1_") => ObjectKind::Blob,
             Some("s1_") => ObjectKind::Snapshot,
+            Some("p1_") => ObjectKind::Proposal,
+            Some("r1_") => ObjectKind::Revision,
             _ => {
                 return Err(ObjectError::new(
                     ObjectErrorKind::InvalidId,

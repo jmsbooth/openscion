@@ -1,0 +1,26 @@
+{
+  "spec": "SPEC-003",
+  "encoding": "domain || 0x00 || u64 big endian payload length || canonical bytes",
+  "snapshot": "s1_0e226daee94758aaceff2b27f8033e9d3eb3462026581d79ea3d4d2bd8e17a65",
+  "root_proposal": {
+    "actor": "agent_01",
+    "intent": "Add README\n",
+    "raw_hex": "4f50524f50303031000e226daee94758aaceff2b27f8033e9d3eb3462026581d79ea3d4d2bd8e17a6500086167656e745f3031000b41646420524541444d450a",
+    "id": "p1_c5c73cbbac74aff0d861a5542000e50d4c1c7a6e74568b6f37104457aa046e63"
+  },
+  "root_revision": {
+    "raw_hex": "4f52455630303031000e226daee94758aaceff2b27f8033e9d3eb3462026581d79ea3d4d2bd8e17a65c5c73cbbac74aff0d861a5542000e50d4c1c7a6e74568b6f37104457aa046e63",
+    "id": "r1_21eec06e30ee661860174671ed53e78f69192c8979839188e02e08b147c186b0"
+  },
+  "child_proposal": {
+    "actor": "agent_02",
+    "intent": "Update doc",
+    "raw_hex": "4f50524f503030310121eec06e30ee661860174671ed53e78f69192c8979839188e02e08b147c186b00e226daee94758aaceff2b27f8033e9d3eb3462026581d79ea3d4d2bd8e17a6500086167656e745f3032000a55706461746520646f63",
+    "id": "p1_7e8bf5d6ba3f3a52b8379a408fc4f10daaa23fbf882ad33b46b350feac2105c3"
+  },
+  "child_revision": {
+    "raw_hex": "4f524556303030310121eec06e30ee661860174671ed53e78f69192c8979839188e02e08b147c186b00e226daee94758aaceff2b27f8033e9d3eb3462026581d79ea3d4d2bd8e17a657e8bf5d6ba3f3a52b8379a408fc4f10daaa23fbf882ad33b46b350feac2105c3",
+    "id": "r1_693b8563d158ad7bc9eddda09d1df70993db88fffb7cf9a8abafc8227fc4b24c"
+  },
+  "assurance": "Reference Python hashlib vectors only; not observed Rust execution."
+}
