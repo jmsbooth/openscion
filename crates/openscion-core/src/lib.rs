@@ -236,8 +236,12 @@ pub fn initialize_repository(path: &Path) -> Result<RepositoryInfo, StoreError> 
         .map_err(|error| StoreError::io("synchronize format marker", error))?;
     drop(stream);
 
-    fs::rename(&temporary_marker, &marker)
-        .map_err(|error| StoreError::io("publish format marker", error))?;
+    // A hard link publishes the marker without replacing an existing name.
+    // Rename can overwrite another writer's format file on Unix.
+    fs::hard_link(&temporary_marker, &marker)
+        .map_err(|error| StoreError::io("publish exclusive format marker", error))?;
+    fs::remove_file(&temporary_marker)
+        .map_err(|error| StoreError::io("remove completed marker staging file", error))?;
 
     // fsync of directories is supported on Linux; unsupported platforms
     // should not be misrepresented as having the same crash durability.
@@ -328,4 +332,6 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
         state: RepositoryState::Unborn,
     })
 }
-\n\npub mod objects;\n
+
+
+pub mod objects;
