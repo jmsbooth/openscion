@@ -131,3 +131,18 @@ After publishing a blob in a disposable Linux test repository, identify the actu
     echo "exit=$?"
 
 Expected: permissive file mode and permissive shard mode each fail E_UNSAFE_PATH (3) without changing stored bytes or permissions; restoring private modes permits digest-verified reads. These tests do not certify same-user race resistance or Windows DACL protection. Record command-by-command outputs and byte hashes.
+
+
+## Snapshot resource-exhaustion negative gates
+
+SPEC-002A enforces at most 4,096 regular-file entries and 64 MiB total
+materialized bytes per snapshot (a repeated blob referenced N times counts N
+times). The tests named
+snapshot_entry_count_is_bounded_before_serialization and
+repeated_large_blob_references_cannot_amplify_snapshot_materialization
+must be individually observed with cargo test --test object_contract -- --nocapture.
+
+Inspect that the excess entries are rejected with E_OBJECT_SIZE, that no
+new snapshot digest file has appeared, and that any preexisting objects remain
+unchanged. The 64 MiB aggregate limit is deliberately conservative for the
+single-machine M1 MVP; it is not a performance claim for distributed use.
