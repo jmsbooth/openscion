@@ -10,7 +10,10 @@ struct Fixture(PathBuf);
 
 impl Fixture {
     fn new() -> Self {
-        let time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let path = std::env::temp_dir().join(format!(
             "openscion-cli-cas-{}-{}-{}",
             std::process::id(),
@@ -70,7 +73,8 @@ fn manually_inspectable_blob_snapshot_and_materialize_round_trip() {
     fs::write(
         fixture.root().join("manifest.tsv"),
         format!("src/main.rs\t{blob_id}\t0\n"),
-    ).unwrap();
+    )
+    .unwrap();
     let snapshot = run(&["snapshot", "put", "--json", root, "manifest.tsv"]);
     assert!(snapshot.status.success(), "{}", stdout(&snapshot));
     let snapshot_id = id_from_json(&snapshot);
@@ -83,13 +87,26 @@ fn manually_inspectable_blob_snapshot_and_materialize_round_trip() {
 
     let target = fixture.root().join("restored");
     let restored = run(&[
-        "snapshot", "materialize", "--json", root, &snapshot_id, target.to_str().unwrap(),
+        "snapshot",
+        "materialize",
+        "--json",
+        root,
+        &snapshot_id,
+        target.to_str().unwrap(),
     ]);
     assert!(restored.status.success(), "{}", stdout(&restored));
-    assert_eq!(fs::read(target.join("src/main.rs")).unwrap(), b"pub fn main() {}\n");
+    assert_eq!(
+        fs::read(target.join("src/main.rs")).unwrap(),
+        b"pub fn main() {}\n"
+    );
 
     let duplicate = run(&[
-        "snapshot", "materialize", "--json", root, &snapshot_id, target.to_str().unwrap(),
+        "snapshot",
+        "materialize",
+        "--json",
+        root,
+        &snapshot_id,
+        target.to_str().unwrap(),
     ]);
     assert_eq!(duplicate.status.code(), Some(5));
     assert_eq!(
@@ -107,8 +124,11 @@ fn corrupted_blob_verification_fails_closed() {
     assert!(saved.status.success());
     let id = id_from_json(&saved);
     let raw = &id[3..];
-    let object = fixture.root().join(".openscion/objects/b1")
-        .join(&raw[..2]).join(raw);
+    let object = fixture
+        .root()
+        .join(".openscion/objects/b1")
+        .join(&raw[..2])
+        .join(raw);
     fs::write(object, b"EVIL").unwrap();
     let failed = run(&["blob", "verify", "--json", root, &id]);
     assert_eq!(failed.status.code(), Some(10));
@@ -137,7 +157,11 @@ fn invalid_or_unsafe_manifest_is_rejected_without_publishing_snapshot() {
         assert!(!stdout(&denied).contains("escape"));
     }
 
-    fs::write(fixture.root().join("manifest.tsv"), format!("safe.txt\t{id}\t0")).unwrap();
+    fs::write(
+        fixture.root().join("manifest.tsv"),
+        format!("safe.txt\t{id}\t0"),
+    )
+    .unwrap();
     let no_final_lf = run(&["snapshot", "put", "--json", root, "manifest.tsv"]);
     assert_eq!(no_final_lf.status.code(), Some(2));
 }
@@ -153,5 +177,8 @@ fn blob_import_rejects_symlink_source() {
     symlink(&target, fixture.root().join("shortcut")).unwrap();
     let denied = run(&["blob", "put", "--json", root, "shortcut"]);
     assert_eq!(denied.status.code(), Some(3));
-    assert_eq!(stdout(&denied).trim(), r#"{"ok":false,"code":"E_UNSAFE_PATH"}"#);
+    assert_eq!(
+        stdout(&denied).trim(),
+        r#"{"ok":false,"code":"E_UNSAFE_PATH"}"#
+    );
 }
