@@ -56,12 +56,7 @@ fn main() -> ExitCode {
         .collect::<Result<Vec<_>, _>>()
     {
         Ok(arguments) => arguments,
-        Err(_) => {
-            return emit_failure(
-                &CliFailure::usage("command arguments must be UTF-8"),
-                json,
-            )
-        }
+        Err(_) => return emit_failure(&CliFailure::usage("command arguments must be UTF-8"), json),
     };
 
     match run(&arguments) {
@@ -89,7 +84,12 @@ fn emit_failure(error: &CliFailure, json: bool) -> ExitCode {
 }
 
 fn run(raw: &[String]) -> Result<Reply, CliFailure> {
-    if raw.iter().filter(|value| value.as_str() == "--json").count() > 1 {
+    if raw
+        .iter()
+        .filter(|value| value.as_str() == "--json")
+        .count()
+        > 1
+    {
         return Err(CliFailure::usage("--json may be specified only once"));
     }
 
