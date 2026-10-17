@@ -1,7 +1,9 @@
 //! OpenScion M1 increment 1 CLI. No source-control changes are supported yet.
 
+use openscion_core::objects::{
+    ObjectError, ObjectId, ObjectStore, SnapshotEntry, MAX_SNAPSHOT_BYTES,
+};
 use openscion_core::{initialize_repository, inspect_repository, StoreError};
-use openscion_core::objects::{ObjectError, ObjectId, ObjectStore, SnapshotEntry, MAX_SNAPSHOT_BYTES};
 use std::env;
 use std::path::Path;
 use std::process::ExitCode;
@@ -67,12 +69,7 @@ fn main() -> ExitCode {
         .collect::<Result<Vec<_>, _>>()
     {
         Ok(arguments) => arguments,
-        Err(_) => {
-            return emit_failure(
-                &CliFailure::usage("command arguments must be UTF-8"),
-                json,
-            )
-        }
+        Err(_) => return emit_failure(&CliFailure::usage("command arguments must be UTF-8"), json),
     };
 
     match run(&arguments) {
@@ -100,7 +97,12 @@ fn emit_failure(error: &CliFailure, json: bool) -> ExitCode {
 }
 
 fn run(raw: &[String]) -> Result<Reply, CliFailure> {
-    if raw.iter().filter(|value| value.as_str() == "--json").count() > 1 {
+    if raw
+        .iter()
+        .filter(|value| value.as_str() == "--json")
+        .count()
+        > 1
+    {
         return Err(CliFailure::usage("--json may be specified only once"));
     }
 
@@ -186,7 +188,6 @@ fn bootstrap(command: &'static str, path: &str) -> Result<Reply, CliFailure> {
     ))
 }
 
-
 fn blob_put(repo: &str, relative: &str) -> Result<Reply, CliFailure> {
     let store = ObjectStore::open(Path::new(repo))?;
     let id = store.put_repo_file(relative)?;
@@ -202,15 +203,18 @@ fn blob_verify(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
     let contents = store.get_blob(&id)?;
     Ok(Reply::new(
         format!("Verified {id} ({} bytes)", contents.len()),
-        format!(r#"{{"ok":true,"command":"blob verify","id":"{id}","bytes":{}}}"#, contents.len()),
+        format!(
+            r#"{{"ok":true,"command":"blob verify","id":"{id}","bytes":{}}}"#,
+            contents.len()
+        ),
     ))
 }
 
 fn snapshot_put(repo: &str, manifest: &str) -> Result<Reply, CliFailure> {
     let store = ObjectStore::open(Path::new(repo))?;
     let bytes = store.read_repo_file(manifest, MAX_SNAPSHOT_BYTES)?;
-    let data = std::str::from_utf8(&bytes)
-        .map_err(|_| CliFailure::usage("manifest must be UTF-8"))?;
+    let data =
+        std::str::from_utf8(&bytes).map_err(|_| CliFailure::usage("manifest must be UTF-8"))?;
     let mut entries = Vec::new();
     if !data.is_empty() && !data.ends_with('\n') {
         return Err(CliFailure::usage("manifest must end with LF"));
@@ -221,7 +225,9 @@ fn snapshot_put(repo: &str, manifest: &str) -> Result<Reply, CliFailure> {
         }
         let columns: Vec<&str> = line.split('\t').collect();
         if columns.len() != 3 {
-            return Err(CliFailure::usage("manifest lines require path, blob ID and 0/1 mode"));
+            return Err(CliFailure::usage(
+                "manifest lines require path, blob ID and 0/1 mode",
+            ));
         }
         let executable = match columns[2] {
             "0" => false,
@@ -237,7 +243,10 @@ fn snapshot_put(repo: &str, manifest: &str) -> Result<Reply, CliFailure> {
     let id = store.put_snapshot(&entries)?;
     Ok(Reply::new(
         format!("Stored canonical snapshot {id}"),
-        format!(r#"{{"ok":true,"command":"snapshot put","id":"{id}","entries":{}}}"#, entries.len()),
+        format!(
+            r#"{{"ok":true,"command":"snapshot put","id":"{id}","entries":{}}}"#,
+            entries.len()
+        ),
     ))
 }
 
