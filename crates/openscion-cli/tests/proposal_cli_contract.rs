@@ -130,3 +130,27 @@ fn invalid_intent_and_parent_type_fail_without_creating_proposals() {
     assert_eq!(bogus.status.code(),Some(8));
     assert!(stdout(&bogus).contains("E_OBJECT_TYPE"));
 }
+
+
+#[test]
+fn status_and_doctor_distinguish_unpromoted_revisions_from_empty_storage() {
+    let f = Repo::new();
+    let snapshot = f.empty_snapshot();
+    f.intent("candidate only");
+    let p = extract_id(&call(&[
+        "proposal", "create", "--json", f.arg(), "root", &snapshot, "agent_a", "intent.txt",
+    ]));
+    let r = extract_id(&call(&["revision", "create", "--json", f.arg(), &p]));
+    assert!(r.starts_with("r1_"));
+
+    let status = call(&["status", f.arg()]);
+    assert!(status.status.success());
+    assert!(stdout(&status).contains("no promoted head"));
+    assert!(!stdout(&status).contains("no revisions"));
+
+    let doctor = call(&["doctor"]);
+    assert!(doctor.status.success());
+    assert!(stdout(&doctor).contains("proposal create/show"));
+    assert!(stdout(&doctor).contains("revision create/show/ancestry"));
+    assert!(stdout(&doctor).contains("unpromoted revisions"));
+}
