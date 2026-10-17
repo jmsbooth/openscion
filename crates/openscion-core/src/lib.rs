@@ -223,9 +223,14 @@ pub fn initialize_repository(path: &Path) -> Result<RepositoryInfo, StoreError> 
 
     let temporary_marker = metadata_dir.join("format.pending");
     let marker = metadata_dir.join("format");
-    let mut stream = OpenOptions::new()
-        .write(true)
-        .create_new(true)
+    let mut marker_options = OpenOptions::new();
+    marker_options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        marker_options.mode(0o600);
+    }
+    let mut stream = marker_options
         .open(&temporary_marker)
         .map_err(|error| StoreError::io("create format marker staging file", error))?;
     stream
