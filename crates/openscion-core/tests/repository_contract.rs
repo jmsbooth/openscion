@@ -208,3 +208,24 @@ fn windows_drive_relative_input_fails_closed() {
         ErrorCode::UnsafePath
     );
 }
+
+
+#[test]
+fn interrupted_marker_stage_remains_invalid_and_is_not_adopted() {
+    let root = Fixture::new();
+    let metadata = root.path().join(".openscion");
+    fs::create_dir(&metadata).unwrap();
+    fs::write(metadata.join("format.pending"), FORMAT_MARKER).unwrap();
+
+    // A partially written staging file is not a published format.
+    assert_eq!(
+        inspect_repository(root.path()).unwrap_err().code,
+        ErrorCode::InvalidStore
+    );
+    assert_eq!(
+        initialize_repository(root.path()).unwrap_err().code,
+        ErrorCode::AlreadyInitialized
+    );
+    assert!(!metadata.join("format").exists());
+    assert_eq!(fs::read(metadata.join("format.pending")).unwrap(), FORMAT_MARKER);
+}
