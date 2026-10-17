@@ -22,6 +22,7 @@ The binary is named "openscion", with two packages: "openscion-core" (library) a
 | R-008 | Write marker through a freshly created staging file, flush it with sync_all, publish via an atomic no-overwrite hard link within the repository metadata directory, then remove the staging name, and sync that directory where supported. On interrupted setup, fail closed (not status OK). |
 | R-009 | Unknown flags, duplicate "--json", non-UTF8 CLI arguments, extra positional arguments, unsupported actions and malformed objects cannot cause a panic. |
 | R-010 | Do not require GitHub Actions, remote services, dependencies, user credentials or any network operation for normal runtime and tests. |
+| R-011 | On Unix, both `.openscion` directory and `format` marker MUST be owner-only. Reject existing group/other permissions as `E_INVALID_STORE`; never silently chmod or repair metadata. On Windows, record inherited ACL and reparse behavior as a separate mandatory qualification gate. |
 
 ## CLI contract
 
