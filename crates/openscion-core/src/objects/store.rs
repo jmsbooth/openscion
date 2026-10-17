@@ -6,7 +6,9 @@ use super::{
     MAX_SNAPSHOT_MATERIALIZED_BYTES,
 };
 use crate::{inspect_repository, is_link_like, validate_directory, ErrorCode};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -282,6 +284,8 @@ impl ObjectStore {
                 return Err(unsafe_path());
             }
         }
+        #[cfg(windows)]
+        crate::windows_security::verify_private_acl(&location).map_err(|_| unsafe_path())?;
         let bytes = read_bounded(&location, object_limit(required_kind), true)?;
         if &ObjectId::for_content(required_kind, &bytes) != id {
             return Err(ObjectError::new(
@@ -438,36 +442,49 @@ fn child_directory(parent: &Path, name: &str, create: bool) -> Result<PathBuf, O
             return Err(unsafe_path());
         }
     }
+    #[cfg(windows)]
+    crate::windows_security::verify_private_acl(&child).map_err(|_| unsafe_path())?;
     Ok(child)
 }
 
 fn create_private_directory(path: &Path) -> Result<(), ObjectError> {
-    let mut builder = fs::DirBuilder::new();
-    builder.recursive(false);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        builder.mode(0o700);
-    }
-    builder.create(path).map_err(|error| {
+    #[cfg(windows)]
+    let result = crate::windows_security::create_private_directory(path);
+    #[cfg(not(windows))]
+    let result = {
+        let mut builder = fs::DirBuilder::new();
+        builder.recursive(false);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            builder.mode(0o700);
+        }
+        builder.create(path)
+    };
+    result.map_err(|error| {
         if error.kind() == ErrorKind::AlreadyExists {
             ObjectError::new(ObjectErrorKind::AlreadyExists, "directory already exists")
         } else {
-            ObjectError::io("create directory", error)
+            ObjectError::io("create private directory", error)
         }
     })
 }
 
 fn create_private_file(path: &Path) -> Result<File, ObjectError> {
-    let mut opts = OpenOptions::new();
-    opts.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(0o600);
-    }
-    opts.open(path)
-        .map_err(|error| ObjectError::io("create exclusive file", error))
+    #[cfg(windows)]
+    let result = crate::windows_security::create_private_file(path);
+    #[cfg(not(windows))]
+    let result = {
+        let mut opts = OpenOptions::new();
+        opts.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            opts.mode(0o600);
+        }
+        opts.open(path)
+    };
+    result.map_err(|error| ObjectError::io("create private exclusive file", error))
 }
 
 fn metadata(path: &Path) -> Result<fs::Metadata, ObjectError> {
