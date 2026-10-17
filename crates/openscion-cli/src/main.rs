@@ -1,7 +1,10 @@
 //! OpenScion M1 increment 1 CLI. No source-control changes are supported yet.
 
+use openscion_core::objects::{
+    ChangeError, ObjectError, ObjectId, ObjectStore, Proposal, SnapshotEntry, MAX_PROPOSAL_BYTES,
+    MAX_SNAPSHOT_BYTES,
+};
 use openscion_core::{initialize_repository, inspect_repository, StoreError};
-use openscion_core::objects::{ChangeError, ObjectError, ObjectId, ObjectStore, Proposal, SnapshotEntry, MAX_PROPOSAL_BYTES, MAX_SNAPSHOT_BYTES};
 use std::env;
 use std::path::Path;
 use std::process::ExitCode;
@@ -77,12 +80,7 @@ fn main() -> ExitCode {
         .collect::<Result<Vec<_>, _>>()
     {
         Ok(arguments) => arguments,
-        Err(_) => {
-            return emit_failure(
-                &CliFailure::usage("command arguments must be UTF-8"),
-                json,
-            )
-        }
+        Err(_) => return emit_failure(&CliFailure::usage("command arguments must be UTF-8"), json),
     };
 
     match run(&arguments) {
@@ -110,7 +108,12 @@ fn emit_failure(error: &CliFailure, json: bool) -> ExitCode {
 }
 
 fn run(raw: &[String]) -> Result<Reply, CliFailure> {
-    if raw.iter().filter(|value| value.as_str() == "--json").count() > 1 {
+    if raw
+        .iter()
+        .filter(|value| value.as_str() == "--json")
+        .count()
+        > 1
+    {
         return Err(CliFailure::usage("--json may be specified only once"));
     }
 
@@ -206,7 +209,6 @@ fn bootstrap(command: &'static str, path: &str) -> Result<Reply, CliFailure> {
     ))
 }
 
-
 fn blob_put(repo: &str, relative: &str) -> Result<Reply, CliFailure> {
     let store = ObjectStore::open(Path::new(repo))?;
     let id = store.put_repo_file(relative)?;
@@ -222,15 +224,18 @@ fn blob_verify(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
     let contents = store.get_blob(&id)?;
     Ok(Reply::new(
         format!("Verified {id} ({} bytes)", contents.len()),
-        format!(r#"{{"ok":true,"command":"blob verify","id":"{id}","bytes":{}}}"#, contents.len()),
+        format!(
+            r#"{{"ok":true,"command":"blob verify","id":"{id}","bytes":{}}}"#,
+            contents.len()
+        ),
     ))
 }
 
 fn snapshot_put(repo: &str, manifest: &str) -> Result<Reply, CliFailure> {
     let store = ObjectStore::open(Path::new(repo))?;
     let bytes = store.read_repo_file(manifest, MAX_SNAPSHOT_BYTES)?;
-    let data = std::str::from_utf8(&bytes)
-        .map_err(|_| CliFailure::usage("manifest must be UTF-8"))?;
+    let data =
+        std::str::from_utf8(&bytes).map_err(|_| CliFailure::usage("manifest must be UTF-8"))?;
     let mut entries = Vec::new();
     if !data.is_empty() && !data.ends_with('\n') {
         return Err(CliFailure::usage("manifest must end with LF"));
@@ -241,7 +246,9 @@ fn snapshot_put(repo: &str, manifest: &str) -> Result<Reply, CliFailure> {
         }
         let columns: Vec<&str> = line.split('\t').collect();
         if columns.len() != 3 {
-            return Err(CliFailure::usage("manifest lines require path, blob ID and 0/1 mode"));
+            return Err(CliFailure::usage(
+                "manifest lines require path, blob ID and 0/1 mode",
+            ));
         }
         let executable = match columns[2] {
             "0" => false,
@@ -257,7 +264,10 @@ fn snapshot_put(repo: &str, manifest: &str) -> Result<Reply, CliFailure> {
     let id = store.put_snapshot(&entries)?;
     Ok(Reply::new(
         format!("Stored canonical snapshot {id}"),
-        format!(r#"{{"ok":true,"command":"snapshot put","id":"{id}","entries":{}}}"#, entries.len()),
+        format!(
+            r#"{{"ok":true,"command":"snapshot put","id":"{id}","entries":{}}}"#,
+            entries.len()
+        ),
     ))
 }
 
@@ -296,7 +306,6 @@ fn snapshot_materialize(repo: &str, raw_id: &str, destination: &str) -> Result<R
     ))
 }
 
-
 fn proposal_create(
     repo: &str,
     raw_base: &str,
@@ -328,7 +337,8 @@ fn proposal_show(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
     let proposal = store.get_proposal(&id)?;
     let base = proposal.base().map(ToString::to_string);
     let parent_text = base.as_deref().unwrap_or("root");
-    let json_parent = base.as_ref()
+    let json_parent = base
+        .as_ref()
         .map(|parent| format!(r#""{parent}""#))
         .unwrap_or_else(|| "null".to_owned());
     Ok(Reply::new(
@@ -355,14 +365,21 @@ fn revision_show(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
     let revision = store.get_revision(&id)?;
     let parent = revision.parent().map(ToString::to_string);
     let parent_text = parent.as_deref().unwrap_or("root");
-    let json_parent = parent.as_ref()
+    let json_parent = parent
+        .as_ref()
         .map(|parent| format!(r#""{parent}""#))
         .unwrap_or_else(|| "null".to_owned());
     Ok(Reply::new(
-        format!("Revision {id}\nparent: {parent_text}\nsnapshot: {}\nproposal: {}\npromoted: false",
-                revision.snapshot(), revision.proposal()),
-        format!(r#"{{"ok":true,"command":"revision show","id":"{id}","parent":{json_parent},"snapshot":"{}","proposal":"{}","promoted":false}}"#,
-                revision.snapshot(),revision.proposal()),
+        format!(
+            "Revision {id}\nparent: {parent_text}\nsnapshot: {}\nproposal: {}\npromoted: false",
+            revision.snapshot(),
+            revision.proposal()
+        ),
+        format!(
+            r#"{{"ok":true,"command":"revision show","id":"{id}","parent":{json_parent},"snapshot":"{}","proposal":"{}","promoted":false}}"#,
+            revision.snapshot(),
+            revision.proposal()
+        ),
     ))
 }
 
@@ -370,8 +387,16 @@ fn revision_ancestry(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
     let store = ObjectStore::open(Path::new(repo))?;
     let id = ObjectId::parse(raw_id)?;
     let chain = store.ancestry(&id)?;
-    let human = chain.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n");
-    let json = chain.iter().map(|id| format!(r#""{id}""#)).collect::<Vec<_>>().join(",");
+    let human = chain
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let json = chain
+        .iter()
+        .map(|id| format!(r#""{id}""#))
+        .collect::<Vec<_>>()
+        .join(",");
     Ok(Reply::new(
         human,
         format!(r#"{{"ok":true,"command":"revision ancestry","revisions":[{json}]}}"#),
