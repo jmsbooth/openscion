@@ -257,8 +257,8 @@ pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
     if unsafe { GetSecurityDescriptorControl(security, &mut control, &mut revision) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    if control & (SE_DACL_PRESENT | SE_DACL_PROTECTED)
-        != SE_DACL_PRESENT | SE_DACL_PROTECTED
+    if (control & (SE_DACL_PRESENT | SE_DACL_PROTECTED))
+        != (SE_DACL_PRESENT | SE_DACL_PROTECTED)
     {
         return Err(invalid_acl());
     }
