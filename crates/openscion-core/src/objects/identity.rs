@@ -52,7 +52,10 @@ impl ObjectId {
 
     pub fn parse(input: &str) -> Result<Self, ObjectError> {
         if input.len() != 67 {
-            return Err(ObjectError::new(ObjectErrorKind::InvalidId, "invalid object ID length"));
+            return Err(ObjectError::new(
+                ObjectErrorKind::InvalidId,
+                "invalid object ID length",
+            ));
         }
         let kind = match input.get(..3) {
             Some("b1_") => ObjectKind::Blob,
