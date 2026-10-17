@@ -4,7 +4,7 @@
   "snapshot": "s1_0e226daee94758aaceff2b27f8033e9d3eb3462026581d79ea3d4d2bd8e17a65",
   "root_proposal": {
     "actor": "agent_01",
-    "intent": "Add README\\n",
+    "intent": "Add README\n",
     "raw_hex": "4f50524f50303031000e226daee94758aaceff2b27f8033e9d3eb3462026581d79ea3d4d2bd8e17a6500086167656e745f3031000b41646420524541444d450a",
     "id": "p1_c5c73cbbac74aff0d861a5542000e50d4c1c7a6e74568b6f37104457aa046e63"
   },
