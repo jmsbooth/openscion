@@ -89,7 +89,10 @@ impl From<ObjectError> for ChangeError {
             ObjectErrorKind::Io | ObjectErrorKind::AlreadyExists => ChangeErrorKind::Io,
             ObjectErrorKind::InvalidSnapshot => ChangeErrorKind::Corrupt,
         };
-        Self { kind, message: error.message }
+        Self {
+            kind,
+            message: error.message,
+        }
     }
 }
 
@@ -110,23 +113,39 @@ impl Proposal {
     ) -> Result<Self, ChangeError> {
         if let Some(ref parent) = base {
             if parent.kind() != ObjectKind::Revision {
-                return Err(ChangeError::new(ChangeErrorKind::WrongType, "base must be a revision"));
+                return Err(ChangeError::new(
+                    ChangeErrorKind::WrongType,
+                    "base must be a revision",
+                ));
             }
         }
         if snapshot.kind() != ObjectKind::Snapshot {
-            return Err(ChangeError::new(ChangeErrorKind::WrongType, "candidate must be a snapshot"));
+            return Err(ChangeError::new(
+                ChangeErrorKind::WrongType,
+                "candidate must be a snapshot",
+            ));
         }
         if actor_claim.is_empty()
             || actor_claim.len() > 80
-            || !actor_claim.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+            || !actor_claim
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
         {
-            return Err(ChangeError::new(ChangeErrorKind::InvalidProposal, "invalid declared actor"));
+            return Err(ChangeError::new(
+                ChangeErrorKind::InvalidProposal,
+                "invalid declared actor",
+            ));
         }
         if intent.is_empty()
             || intent.len() > 2048
-            || intent.chars().any(|c| c == '\0' || c == '\r' || (c.is_control() && c != '\n' && c != '\t'))
+            || intent
+                .chars()
+                .any(|c| c == '\0' || c == '\r' || (c.is_control() && c != '\n' && c != '\t'))
         {
-            return Err(ChangeError::new(ChangeErrorKind::InvalidProposal, "invalid change intent"));
+            return Err(ChangeError::new(
+                ChangeErrorKind::InvalidProposal,
+                "invalid change intent",
+            ));
         }
         Ok(Self {
             base,
@@ -136,14 +155,24 @@ impl Proposal {
         })
     }
 
-    pub fn base(&self) -> Option<&ObjectId> { self.base.as_ref() }
-    pub fn snapshot(&self) -> &ObjectId { &self.snapshot }
+    pub fn base(&self) -> Option<&ObjectId> {
+        self.base.as_ref()
+    }
+    pub fn snapshot(&self) -> &ObjectId {
+        &self.snapshot
+    }
     /// This is an unverified claim, not an authenticated identity.
-    pub fn actor_claim(&self) -> &str { &self.actor_claim }
-    pub fn intent(&self) -> &str { &self.intent }
+    pub fn actor_claim(&self) -> &str {
+        &self.actor_claim
+    }
+    pub fn intent(&self) -> &str {
+        &self.intent
+    }
 
     pub fn encode(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(8 + 1 + 32 + 32 + 2 + self.actor_claim.len() + 2 + self.intent.len());
+        let mut out = Vec::with_capacity(
+            8 + 1 + 32 + 32 + 2 + self.actor_claim.len() + 2 + self.intent.len(),
+        );
         out.extend_from_slice(PROPOSAL_MAGIC);
         match &self.base {
             Some(base) => {
@@ -161,7 +190,8 @@ impl Proposal {
     }
 
     pub fn decode(raw: &[u8]) -> Result<Self, ChangeError> {
-        if raw.len() > MAX_PROPOSAL_BYTES || raw.len() < 8 + 1 + 32 + 2 + 1 + 2 + 1
+        if raw.len() > MAX_PROPOSAL_BYTES
+            || raw.len() < 8 + 1 + 32 + 2 + 1 + 2 + 1
             || raw.get(..8) != Some(PROPOSAL_MAGIC.as_slice())
         {
             return Err(invalid_proposal());
@@ -170,14 +200,19 @@ impl Proposal {
         let present = take(raw, &mut offset, 1)?[0];
         let base = match present {
             0 => None,
-            1 => Some(ObjectId::from_digest(ObjectKind::Revision, read_digest(raw, &mut offset)?)),
+            1 => Some(ObjectId::from_digest(
+                ObjectKind::Revision,
+                read_digest(raw, &mut offset)?,
+            )),
             _ => return Err(invalid_proposal()),
         };
         let snapshot = ObjectId::from_digest(ObjectKind::Snapshot, read_digest(raw, &mut offset)?);
         let actor_len = read_u16(raw, &mut offset)?;
-        let actor = std::str::from_utf8(take(raw, &mut offset, actor_len)?).map_err(|_| invalid_proposal())?;
+        let actor = std::str::from_utf8(take(raw, &mut offset, actor_len)?)
+            .map_err(|_| invalid_proposal())?;
         let intent_len = read_u16(raw, &mut offset)?;
-        let intent = std::str::from_utf8(take(raw, &mut offset, intent_len)?).map_err(|_| invalid_proposal())?;
+        let intent = std::str::from_utf8(take(raw, &mut offset, intent_len)?)
+            .map_err(|_| invalid_proposal())?;
         if offset != raw.len() {
             return Err(invalid_proposal());
         }
@@ -205,9 +240,15 @@ impl Revision {
         }
     }
 
-    pub fn parent(&self) -> Option<&ObjectId> { self.parent.as_ref() }
-    pub fn snapshot(&self) -> &ObjectId { &self.snapshot }
-    pub fn proposal(&self) -> &ObjectId { &self.proposal }
+    pub fn parent(&self) -> Option<&ObjectId> {
+        self.parent.as_ref()
+    }
+    pub fn snapshot(&self) -> &ObjectId {
+        &self.snapshot
+    }
+    pub fn proposal(&self) -> &ObjectId {
+        &self.proposal
+    }
 
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(MAX_REVISION_BYTES);
@@ -225,7 +266,8 @@ impl Revision {
     }
 
     pub fn decode(raw: &[u8]) -> Result<Self, ChangeError> {
-        if raw.len() < 73 || raw.len() > MAX_REVISION_BYTES
+        if raw.len() < 73
+            || raw.len() > MAX_REVISION_BYTES
             || raw.get(..8) != Some(REVISION_MAGIC.as_slice())
         {
             return Err(invalid_revision());
@@ -250,7 +292,11 @@ impl Revision {
         if offset != raw.len() {
             return Err(invalid_revision());
         }
-        let revision = Self { parent, snapshot, proposal };
+        let revision = Self {
+            parent,
+            snapshot,
+            proposal,
+        };
         if revision.encode() != raw {
             return Err(invalid_revision());
         }
@@ -321,9 +367,7 @@ impl ObjectStore {
             let raw = self.get_object(&next, ObjectKind::Revision)?;
             let revision = Revision::decode(&raw)?;
             let proposal = self.read_proposal_subject(revision.proposal())?;
-            if proposal.base() != revision.parent()
-                || proposal.snapshot() != revision.snapshot()
-            {
+            if proposal.base() != revision.parent() || proposal.snapshot() != revision.snapshot() {
                 return Err(ChangeError::new(
                     ChangeErrorKind::InvalidRevision,
                     "revision contains inconsistent proposal references",
@@ -355,9 +399,15 @@ fn read_u16(raw: &[u8], offset: &mut usize) -> Result<usize, ChangeError> {
 }
 
 fn invalid_proposal() -> ChangeError {
-    ChangeError::new(ChangeErrorKind::InvalidProposal, "invalid canonical proposal bytes")
+    ChangeError::new(
+        ChangeErrorKind::InvalidProposal,
+        "invalid canonical proposal bytes",
+    )
 }
 
 fn invalid_revision() -> ChangeError {
-    ChangeError::new(ChangeErrorKind::InvalidRevision, "invalid canonical revision bytes")
+    ChangeError::new(
+        ChangeErrorKind::InvalidRevision,
+        "invalid canonical revision bytes",
+    )
 }
