@@ -21,7 +21,7 @@ Magic 8 bytes ASCII OSNAP001, followed by u32_BE entry count. Each entry, in str
 
 ## Portable path policy
 
-ASCII only: letters, digits, dot, underscore, hyphen and forward slash. Max 1024 bytes and 64 nonempty components. Disallow absolute paths, backslash, colon, trailing dot, empty, "." or ".." components; reserve top-level ".openscion" and ".git"; reject case-insensitive duplicates and conflicts between file and parent directory. Reject Windows device basenames CON/PRN/AUX/NUL/COM1..9/LPT1..9 even with extensions. Reject Unicode until a versioned normalization policy exists. Only regular files are represented; symbolic links/devices/etc are not v1 objects. This is a deliberate restriction, not equivalent to supporting every Git path.
+ASCII only: letters, digits, dot, underscore, hyphen and forward slash. Max 1024 bytes and 64 nonempty components. Disallow absolute paths, backslash, colon, trailing dot, empty, "." or ".." components; reserve ".openscion" and ".git" components at every directory level; reject case-insensitive duplicates and conflicts between file and parent directory. Reject Windows device basenames CON/PRN/AUX/NUL/COM1..9/LPT1..9 even with extensions. Reject Unicode until a versioned normalization policy exists. Only regular files are represented; symbolic links/devices/etc are not v1 objects. This is a deliberate restriction, not equivalent to supporting every Git path.
 
 ## Local persistence invariants
 
