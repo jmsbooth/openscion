@@ -114,3 +114,20 @@ On Windows NTFS with actual Rust 1.85.1 and appropriate DACLs, execute PowerShel
 ## Review and gate
 
 Attach command-by-command stdout, stderr, return codes, test fixture hashes, source SHA, golden SHA-256 and snapshot bytes, dependency lockfile/license report, signed review. No merge into main until PR #2 is qualified and both PRs pass required blocking tests on the target platforms.
+
+## Additional Unix CAS privacy regression
+
+After publishing a blob in a disposable Linux test repository, identify the actual on-disk digest file and its parent shard from the printed blob ID. Do not replace a production file.
+
+    chmod 666 "$blob_path"
+    ./target/debug/openscion blob verify --json "$root" "$blob_id"
+    echo "exit=$?"
+    chmod 600 "$blob_path"
+    chmod 777 "$(dirname "$blob_path")"
+    ./target/debug/openscion blob verify --json "$root" "$blob_id"
+    echo "exit=$?"
+    chmod 700 "$(dirname "$blob_path")"
+    ./target/debug/openscion blob verify --json "$root" "$blob_id"
+    echo "exit=$?"
+
+Expected: permissive file mode and permissive shard mode each fail E_UNSAFE_PATH (3) without changing stored bytes or permissions; restoring private modes permits digest-verified reads. These tests do not certify same-user race resistance or Windows DACL protection. Record command-by-command outputs and byte hashes.
