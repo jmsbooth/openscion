@@ -3,7 +3,7 @@
 ## Preconditions / evidence
 
 - Must run against exact PR #3 head commit on a host with Rust 1.85.1, Cargo, rustfmt and Clippy. Parent PR #2 is an unqualified dependency: qualify PR #2 first.
-- SHA-2 dependency is pinned at 0.10.9, but Cargo.lock was not generated in this executor. On an approved network-connected workstation, resolve dependencies, generate Cargo.lock, capture checksum/license/SBOM/security review and commit the lockfile. After that, use cargo --locked --offline for reproducible runs with a populated local registry cache.
+- SHA-2 0.10.9 and libc 0.2.191 are pinned; Cargo 1.85.1 generated and committed the 2,498-byte Cargo.lock (SHA-256 `3242325a9eef10591b37abbec807dc20f74a3e0755fffcd61ed814726`). The Linux suite was executed with `--locked --offline`. Reproduce with an independently populated cache, retain exact-head logs, and review advisories/licenses at release time. The 2026-10-17 point-in-time OSV query found no advisories for ten registry packages; that is not a permanent safety certification.
 - Run **individual commands** and inspect named outputs, expected/actual results, filesystem changes and nonzero exit codes. Record exact source SHA, OS, compiler, Cargo version, SHA-256 of objects, test logs and independent reviewer.
 - Do not invoke GitHub Actions (no credits). Missing OS/toolchain/case is NOT_RUN or BLOCKED, never PASS.
 - Local temporary fixture MUST NOT contain production source, secrets or credentials. Test in isolated repo copies.
@@ -24,6 +24,12 @@
     cargo build --workspace --locked --offline
 
 Perform a separate dependency vulnerability/licensing scan on Cargo.lock before accepting RustCrypto + transitive crates. An offline Rust command may report dependency-missing until the approved fetch is complete. Preserve the failure transcript.
+
+## Process-kill and platform qualification (2026-10-17)
+
+- Linux SIGKILL/restart driver: `qa/linux/crash_qualification.py`; external injected barriers: `qa/linux/faultshim.c`, no production Rust hooks. Observed **70/70** process-kill checkpoints and **20-way** CAS/concurrent checkout contention. Raw artifact archive and replay instructions in `qa/linux/README.md` and `docs/engineering/evidence/M1-process-kill-qualification-2026-10-17.md`.
+- For native Windows NTFS, run and inspect `qa/windows/M1-Qualification.ps1`. The test is **NOT RUN** in Linux; source review identified missing native DACL enforcement (FOSS-484). Do not mark the current Windows ACL-negative cases PASS before implementing and testing protected DACLs. No Wine or target cross-compile is an acceptable substitute.
+- Process SIGKILL checks are not electrical-power-loss/fsync durability qualification, and staged debris reclamation remains separately tracked by FOSS-485.
 
 ## PowerShell manual end-to-end
 
