@@ -54,7 +54,11 @@ impl Snapshot {
     pub fn encode(&self) -> Vec<u8> {
         // Snapshot::new / ::decode guarantee these lengths are in range.
         let capacity = HEADER_LEN
-            + self.entries.iter().map(|e| 2 + e.path.len() + 1 + 32).sum::<usize>();
+            + self
+                .entries
+                .iter()
+                .map(|e| 2 + e.path.len() + 1 + 32)
+                .sum::<usize>();
         let mut out = Vec::with_capacity(capacity);
         out.extend_from_slice(MAGIC);
         out.extend_from_slice(&(self.entries.len() as u32).to_be_bytes());
@@ -126,7 +130,10 @@ fn take<'a>(input: &'a [u8], offset: &mut usize, size: usize) -> Result<&'a [u8]
 }
 
 fn invalid_snapshot() -> ObjectError {
-    ObjectError::new(ObjectErrorKind::InvalidSnapshot, "invalid canonical snapshot bytes")
+    ObjectError::new(
+        ObjectErrorKind::InvalidSnapshot,
+        "invalid canonical snapshot bytes",
+    )
 }
 
 fn snapshot_size_error() -> ObjectError {
