@@ -19,6 +19,9 @@ use std::fmt;
 /// Explicit allocation/persistence limits for local M1 objects.
 pub const MAX_BLOB_BYTES: usize = 16 * 1024 * 1024;
 pub const MAX_SNAPSHOT_BYTES: usize = 8 * 1024 * 1024;
+/// Conservative local MVP limits to bound validation and checkout cost.
+pub const MAX_SNAPSHOT_ENTRIES: usize = 4096;
+pub const MAX_SNAPSHOT_MATERIALIZED_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ObjectErrorKind {
