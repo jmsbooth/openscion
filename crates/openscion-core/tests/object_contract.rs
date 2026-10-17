@@ -181,6 +181,9 @@ fn invalid_paths_and_case_or_prefix_collisions_are_refused() {
         "a/",
         ".openscion/format",
         ".git/config",
+        "vendor/.git/config",
+        "source/.openscion/format",
+        "nested/.GiT/hooks/post-commit",
         "src\\win.rs",
         "a:evil",
         "con",
@@ -420,4 +423,40 @@ fn decoded_snapshot_with_unsafe_path_returns_invalid_snapshot_type() {
         Snapshot::decode(&raw).unwrap_err().kind,
         ObjectErrorKind::InvalidSnapshot
     );
+}
+
+
+#[cfg(unix)]
+#[test]
+fn blob_reads_fail_closed_if_object_is_group_world_accessible() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::new();
+    let store = fixture.store();
+    let blob = store.put_blob(b"sealed");
+    let blob = blob.unwrap();
+    let path = fixture.object_path(&blob);
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o666)).unwrap();
+    assert_eq!(
+        store.get_blob(&blob).unwrap_err().kind,
+        ObjectErrorKind::UnsafePath
+    );
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(store.get_blob(&blob).unwrap(), b"sealed");
+}
+
+#[cfg(unix)]
+#[test]
+fn object_store_rejects_group_world_writable_shards() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::new();
+    let store = fixture.store();
+    let blob = store.put_blob(b"private").unwrap();
+    let shard = fixture.object_path(&blob).parent().unwrap().to_path_buf();
+    fs::set_permissions(&shard, fs::Permissions::from_mode(0o777)).unwrap();
+    assert_eq!(
+        store.get_blob(&blob).unwrap_err().kind,
+        ObjectErrorKind::UnsafePath
+    );
+    fs::set_permissions(&shard, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(store.get_blob(&blob).unwrap(), b"private");
 }
