@@ -32,7 +32,7 @@ ASCII only: letters, digits, dot, underscore, hyphen and forward slash. Max 1024
 5. Verify FOSS-387 store format before object operations; missing/partial repository metadata => fail closed.
 6. Interrupted writes leave no final digest name. Staging files are ignored on read and are not treated as verified objects; cleanup/GC is future work.
 7. Materialization uses a newly allocated sibling staging directory, validates contents and expected blobs, writes files with create_new and sync, then renames staging to a nonexistent final directory. Existing destinations must never be overwritten. No revisions/channels are modified by a materialization.
-8. On Unix, default directories 0700 and staged files 0600. Windows ACLs and crash durability require separate OS tests.
+8. On Unix, create directories with mode 0700 and staged files with mode 0600, and **reject existing object directories/files** granting any group/other permissions. Do not automatically chmod objects or directories. Windows ACLs and crash durability require separate OS tests.
 
 ## Public API (subject to review)
 
@@ -57,6 +57,7 @@ CAS-014: duplicate publishing is safe; concurrent identical writes never mutate 
 CAS-015: interrupted temporary write and restart do not expose partial final objects
 CAS-016: no valid store marker means no writes
 CAS-017: manual CLI inspection of object bytes, IDs, manifest and restoration
+CAS-018: existing object files or storage shards with Unix group/other permissions are rejected, remain untouched, and become readable only after permissions are restored; native Windows ACL evaluation remains a separate gate
 
 ## Validation and dependencies
 
