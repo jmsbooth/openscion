@@ -96,7 +96,7 @@ pub struct RepositoryInfo {
 ///
 /// A reparse point can appear directory-like without being classified by
 /// FileType::is_symlink on Windows.
-fn is_link_like(metadata: &fs::Metadata) -> bool {
+pub(crate) fn is_link_like(metadata: &fs::Metadata) -> bool {
     if metadata.file_type().is_symlink() {
         return true;
     }
@@ -116,7 +116,7 @@ fn is_link_like(metadata: &fs::Metadata) -> bool {
 /// This checks the namespace at the time of inspection. A hostile local
 /// actor with concurrent write access could replace directories afterward;
 /// M1 does not claim race-free containment against that attacker.
-fn validate_directory(path: &Path) -> Result<PathBuf, StoreError> {
+pub(crate) fn validate_directory(path: &Path) -> Result<PathBuf, StoreError> {
     if path.as_os_str().is_empty() {
         return Err(StoreError::new(
             ErrorCode::UnsafePath,
@@ -390,3 +390,5 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
         state: RepositoryState::Unborn,
     })
 }
+
+pub mod objects;

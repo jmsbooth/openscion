@@ -1,5 +1,8 @@
 //! OpenScion M1 increment 1 CLI. No source-control changes are supported yet.
 
+use openscion_core::objects::{
+    ObjectError, ObjectId, ObjectStore, SnapshotEntry, MAX_SNAPSHOT_BYTES,
+};
 use openscion_core::{initialize_repository, inspect_repository, StoreError};
 use std::env;
 use std::path::Path;
@@ -31,6 +34,16 @@ impl CliFailure {
             code: "E_USAGE",
             status: 2,
             message: message.into(),
+        }
+    }
+}
+
+impl From<ObjectError> for CliFailure {
+    fn from(failure: ObjectError) -> Self {
+        Self {
+            code: failure.kind.code(),
+            status: failure.kind.exit_code(),
+            message: failure.message,
         }
     }
 }
@@ -113,9 +126,14 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
                 "  openscion doctor [--json]\n",
                 "  openscion init [--json] [existing-directory]\n",
                 "  openscion status [--json] [existing-directory]\n",
+                "  openscion blob put [--json] <repo> <repo-relative-file>\n",
+                "  openscion blob verify [--json] <repo> <b1_ID>\n",
+                "  openscion snapshot put [--json] <repo> <repo-relative-manifest.tsv>\n",
+                "  openscion snapshot show [--json] <repo> <s1_ID>\n",
+                "  openscion snapshot materialize [--json] <repo> <s1_ID> <new-directory>\n",
                 "JSON errors are stable and do not include filesystem paths.\n",
             ),
-            r#"{"ok":true,"command":"help","implemented":["help","version","doctor","init","status"]}"#,
+            r#"{"ok":true,"command":"help","implemented":["help","version","doctor","init","status","blob put","blob verify","snapshot put","snapshot show","snapshot materialize"]}"#,
         )),
         ["--version"] | ["version"] => Ok(Reply::new(
             format!("openscion {}", env!("CARGO_PKG_VERSION")),
@@ -127,16 +145,21 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
         ["doctor"] => Ok(Reply::new(
             concat!(
                 "OpenScion local-only bootstrap\n",
-                "Implemented: init, status\n",
+                "Implemented: init, status, blob put/verify, snapshot put/show/materialize\n",
                 "Pending: propose, verify, promote, rollback\n",
                 "Storage: local format marker only (no revision storage)\n",
             ),
-            r#"{"ok":true,"command":"doctor","implemented":["init","status"],"pending":["propose","verify","promote","rollback"],"storage":"local-bootstrap"}"#,
+            r#"{"ok":true,"command":"doctor","implemented":["init","status","blob put","blob verify","snapshot put","snapshot show","snapshot materialize"],"pending":["propose","promote","rollback"],"storage":"local-cas-v1"}"#,
         )),
         ["init"] => bootstrap("init", "."),
         ["init", path] => bootstrap("init", path),
         ["status"] => bootstrap("status", "."),
         ["status", path] => bootstrap("status", path),
+        ["blob", "put", repo, relative] => blob_put(repo, relative),
+        ["blob", "verify", repo, id] => blob_verify(repo, id),
+        ["snapshot", "put", repo, manifest] => snapshot_put(repo, manifest),
+        ["snapshot", "show", repo, id] => snapshot_show(repo, id),
+        ["snapshot", "materialize", repo, id, target] => snapshot_materialize(repo, id, target),
         _ => Err(CliFailure::usage(
             "unsupported command or invalid number of arguments; see --help",
         )),
@@ -162,5 +185,102 @@ fn bootstrap(command: &'static str, path: &str) -> Result<Reply, CliFailure> {
         format!(
             r#"{{"ok":true,"command":"{command}","format":"openscion.local-store/1","state":"unborn"}}"#
         ),
+    ))
+}
+
+fn blob_put(repo: &str, relative: &str) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let id = store.put_repo_file(relative)?;
+    Ok(Reply::new(
+        format!("Stored immutable blob {id}"),
+        format!(r#"{{"ok":true,"command":"blob put","id":"{id}"}}"#),
+    ))
+}
+
+fn blob_verify(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let id = ObjectId::parse(raw_id)?;
+    let contents = store.get_blob(&id)?;
+    Ok(Reply::new(
+        format!("Verified {id} ({} bytes)", contents.len()),
+        format!(
+            r#"{{"ok":true,"command":"blob verify","id":"{id}","bytes":{}}}"#,
+            contents.len()
+        ),
+    ))
+}
+
+fn snapshot_put(repo: &str, manifest: &str) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let bytes = store.read_repo_file(manifest, MAX_SNAPSHOT_BYTES)?;
+    let data =
+        std::str::from_utf8(&bytes).map_err(|_| CliFailure::usage("manifest must be UTF-8"))?;
+    let mut entries = Vec::new();
+    if !data.is_empty() && !data.ends_with('\n') {
+        return Err(CliFailure::usage("manifest must end with LF"));
+    }
+    for line in data.split_terminator('\n') {
+        if line.is_empty() {
+            return Err(CliFailure::usage("empty manifest line"));
+        }
+        let columns: Vec<&str> = line.split('\t').collect();
+        if columns.len() != 3 {
+            return Err(CliFailure::usage(
+                "manifest lines require path, blob ID and 0/1 mode",
+            ));
+        }
+        let executable = match columns[2] {
+            "0" => false,
+            "1" => true,
+            _ => return Err(CliFailure::usage("manifest mode must be 0 or 1")),
+        };
+        entries.push(SnapshotEntry {
+            path: columns[0].to_owned(),
+            blob: ObjectId::parse(columns[1])?,
+            executable,
+        });
+    }
+    let id = store.put_snapshot(&entries)?;
+    Ok(Reply::new(
+        format!("Stored canonical snapshot {id}"),
+        format!(
+            r#"{{"ok":true,"command":"snapshot put","id":"{id}","entries":{}}}"#,
+            entries.len()
+        ),
+    ))
+}
+
+fn snapshot_show(repo: &str, raw_id: &str) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let id = ObjectId::parse(raw_id)?;
+    let entries = store.get_snapshot(&id)?;
+    let mut human = String::new();
+    let mut json_entries = Vec::with_capacity(entries.len());
+    for entry in &entries {
+        let mode = u8::from(entry.executable);
+        human.push_str(&format!("{}\t{}\t{mode}\n", entry.path, entry.blob));
+        // Snapshot path policy excludes quotation marks, control characters,
+        // backslashes and Unicode; these strings are safe in JSON literals.
+        json_entries.push(format!(
+            r#"{{"path":"{}","blob":"{}","mode":{mode}}}"#,
+            entry.path, entry.blob
+        ));
+    }
+    Ok(Reply::new(
+        human,
+        format!(
+            r#"{{"ok":true,"command":"snapshot show","id":"{id}","entries":[{}]}}"#,
+            json_entries.join(",")
+        ),
+    ))
+}
+
+fn snapshot_materialize(repo: &str, raw_id: &str, destination: &str) -> Result<Reply, CliFailure> {
+    let store = ObjectStore::open(Path::new(repo))?;
+    let id = ObjectId::parse(raw_id)?;
+    store.materialize(&id, Path::new(destination))?;
+    Ok(Reply::new(
+        "Materialized verified snapshot into new directory",
+        format!(r#"{{"ok":true,"command":"snapshot materialize","id":"{id}"}}"#),
     ))
 }

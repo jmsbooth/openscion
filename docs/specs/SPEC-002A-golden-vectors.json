@@ -1,0 +1,18 @@
+{
+  "protocol": "SPEC-002A",
+  "method": "Independent Python hashlib reference vectors (not Rust tests)",
+  "algorithm": "SHA-256(domain || u64_BE(length) || bytes)",
+  "blobs": {
+    "": "b1_ad9d112b8c5063b4f394c2c16c6c5ecb42fa36453f81d02d5029f7d4049185bc",
+    "abc": "b1_6c306925773a9a4fa79e7a6369bbe233af1b1d93aaa1af262ecacbc69d3e600b",
+    "hello_world": "b1_7c817989d37f477322f6825e9f69b86da87079f3357c83e3417146a663f33949",
+    "file_a": "b1_cae2be626bc200e004b2d9c7312d7cfb86271947e14f76c1692be71351b0ed64",
+    "file_b": "b1_41d5c62dfbfded13d869e6ea10bc3578a332b3ce6b40cb18d552621b0d8f1d4c"
+  },
+  "snapshots": {
+    "empty": "s1_0e226daee94758aaceff2b27f8033e9d3eb3462026581d79ea3d4d2bd8e17a65",
+    "two_files": "s1_474c2c837d6183ff759047f31a18f5dd99dc1080922f0bd2cc104a2c2c1cd198",
+    "two_files_manifest_hex": "4f534e41503030310000000200087372632f612e72730141d5c62dfbfded13d869e6ea10bc3578a332b3ce6b40cb18d552621b0d8f1d4c00087372632f7a2e727300cae2be626bc200e004b2d9c7312d7cfb86271947e14f76c1692be71351b0ed64"
+  },
+  "assurance": "Only reference identity/encoding values checked independently; no compiled Rust verification."
+}
