@@ -218,7 +218,7 @@ impl ObjectStore {
         // Only own/remove a stage after exclusive creation succeeds. A
         // collided name must never cause deletion of somebody else's file.
         let mut file = create_private_file(&staging)?;
-        let mut cleanup = FileCleanup(staging.clone());
+        let mut cleanup = FileCleanup(Some(staging.clone()));
         file.write_all(bytes)
             .map_err(|error| ObjectError::io("write staging object", error))?;
         file.sync_all()
@@ -305,11 +305,13 @@ impl ObjectStore {
     }
 }
 
-struct FileCleanup(PathBuf);
+struct FileCleanup(Option<PathBuf>);
 
 impl Drop for FileCleanup {
     fn drop(&mut self) {
-        fs::remove_file(&self.0).ok();
+        if let Some(path) = &self.0 {
+            fs::remove_file(path).ok();
+        }
     }
 }
 
