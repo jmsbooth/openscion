@@ -64,6 +64,14 @@ SQLite is public domain and rusqlite is MIT; choose explicit bundled/system depe
 
 This ADR does **not** certify redb 2.6.4 under Rust 1.85.1, Windows NTFS, Linux fsync, power-loss behavior, network filesystem semantics, multi-process locks, integrity against a malicious same-UID process, or distributed consensus. Such claims require the acceptance artifacts described in SPEC-004.
 
+## 2026-10-17 runtime compatibility evidence (evaluation only)
+
+A **standalone nested scratch Cargo workspace**, not a production OpenScion dependency, now lives at `qa/spikes/redb-264/`. It was compiled at Rust **1.85.1** using exact `redb = "=2.6.4"` with reviewed `Cargo.lock`. Exact PR #5 head `c2eed69e1372a9250b74215bc0774a9df4bc27d8` passed local `cargo fmt --check`, `cargo clippy -- -D warnings`, Cargo build and 20 subprocess SIGKILL/reopen recovery scenarios. It used `Durability::Immediate` and persisted head, sequence, receipt and idempotency as a single write transaction.
+
+Observed: 10 kills before commit left all four records empty; 10 kills after commit/before response preserved all four, with idempotent retry recovering the same result and changed fingerprint rejected. Thread contenders N=2,20,100 each produced one winner and N−1 expected-head conflicts. Point-in-time OSV QueryBatch checks returned no reported advisories for redb 2.6.4 and libc 0.2.191 on 2026-10-17. Original 23-scenario manifest SHA-256: `62d47e1807772ec486b91cd765f5d96d88c3c6bc9c09c49336f3099de65d5e5c`; evaluated Cargo.lock SHA-256 `804523ee98f95aa3f30f84ecd320786e0b247e78da0d3a2d9c091cc7ef552b1c`. Scratch source, runbook and the manifest are committed.
+
+**Limitations:** no native Windows test, true power-loss test, security audit beyond the point-in-time advisory query, schema-migration test, independent signoff, multi-process authority/locking or issuer signature validation. The scratch receipt is deliberately not a cryptographic proof. The evaluation supports the compatibility candidate but **does not satisfy ADR acceptance criteria** or authorize FOSS-479 implementation.
+
 ## Acceptance / reversal criteria
 
 Promote this ADR to **Accepted** only after:
