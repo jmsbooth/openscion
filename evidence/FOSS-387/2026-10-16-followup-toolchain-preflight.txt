@@ -1,0 +1,38 @@
+Qualification preflight for OpenScion PR #2 -> PR #3 -> PR #4
+UTC: 2026-10-17T00:36:51Z
+Host: Linux 6.18.44 x86_64
+OS: PRETTY_NAME="Debian GNU/Linux 13 (trixie)"
+
+$ git --version
+git version 2.47.3
+exit_status=0
+
+$ rustc --version
+bash: line 1: rustc: command not found
+exit_status=127
+
+$ cargo --version
+bash: line 1: cargo: command not found
+exit_status=127
+
+$ rustup --version
+bash: line 1: rustup: command not found
+exit_status=127
+
+$ cargo test --workspace --offline -- --nocapture
+bash: line 1: cargo: command not found
+exit_status=127
+
+$ cargo fmt --all -- --check
+bash: line 1: cargo: command not found
+exit_status=127
+
+$ cargo clippy --workspace --all-targets --offline -- -D warnings
+bash: line 1: cargo: command not found
+exit_status=127
+
+Rust distribution DNS resolution:
+dns_exit=2
+
+Github DNS resolution:
+dns_exit=2
