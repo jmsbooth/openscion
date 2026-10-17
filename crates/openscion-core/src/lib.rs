@@ -5,7 +5,9 @@
 //! directory was initialized with a recognized version.
 
 use std::fmt;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
+#[cfg(not(windows))]
+use std::fs::OpenOptions;
 use std::io::{ErrorKind, Read, Write};
 use std::path::{Component, Path, PathBuf};
 
