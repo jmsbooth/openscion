@@ -260,6 +260,13 @@ impl ObjectStore {
                 "stored object is not a bounded regular file",
             ));
         }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if file_metadata.permissions().mode() & 0o077 != 0 {
+                return Err(unsafe_path());
+            }
+        }
         let bytes = read_bounded(&location, object_limit(required_kind), true)?;
         if &ObjectId::for_content(required_kind, &bytes) != id {
             return Err(ObjectError::new(
@@ -413,6 +420,13 @@ fn child_directory(parent: &Path, name: &str, create: bool) -> Result<PathBuf, O
     let attributes = metadata(&child)?;
     if is_link_like(&attributes) || !attributes.is_dir() {
         return Err(unsafe_path());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if attributes.permissions().mode() & 0o077 != 0 {
+            return Err(unsafe_path());
+        }
     }
     Ok(child)
 }
