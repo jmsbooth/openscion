@@ -231,3 +231,36 @@ fn interrupted_marker_stage_remains_invalid_and_is_not_adopted() {
     assert!(!metadata.join("format").exists());
     assert_eq!(fs::read(metadata.join("format.pending")).unwrap(), FORMAT_MARKER);
 }
+
+
+#[cfg(unix)]
+#[test]
+fn inspect_refuses_permissive_metadata_directory() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = Fixture::new();
+    initialize_repository(root.path()).unwrap();
+    let meta = root.path().join(".openscion");
+    fs::set_permissions(&meta, fs::Permissions::from_mode(0o777)).unwrap();
+    assert_eq!(
+        inspect_repository(root.path()).unwrap_err().code,
+        ErrorCode::InvalidStore
+    );
+    fs::set_permissions(&meta, fs::Permissions::from_mode(0o700)).unwrap();
+    assert_eq!(inspect_repository(root.path()).unwrap().state, RepositoryState::Unborn);
+}
+
+#[cfg(unix)]
+#[test]
+fn inspect_refuses_permissive_format_marker() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = Fixture::new();
+    initialize_repository(root.path()).unwrap();
+    let marker = root.path().join(".openscion/format");
+    fs::set_permissions(&marker, fs::Permissions::from_mode(0o666)).unwrap();
+    assert_eq!(
+        inspect_repository(root.path()).unwrap_err().code,
+        ErrorCode::InvalidStore
+    );
+    fs::set_permissions(&marker, fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(inspect_repository(root.path()).unwrap().state, RepositoryState::Unborn);
+}
