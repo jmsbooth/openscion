@@ -3,14 +3,17 @@
 //! Only blobs and canonical path snapshots exist in v1. This is not a
 //! revision system, authorization service or provenance mechanism.
 
-mod identity;
 mod changes;
+mod identity;
 mod safe_path;
 mod snapshot;
 mod store;
 
+pub use changes::{
+    ChangeError, ChangeErrorKind, Proposal, Revision, MAX_ANCESTRY_DEPTH, MAX_PROPOSAL_BYTES,
+    MAX_REVISION_BYTES,
+};
 pub use identity::{ObjectId, ObjectKind};
-pub use changes::{ChangeError, ChangeErrorKind, Proposal, Revision, MAX_ANCESTRY_DEPTH, MAX_PROPOSAL_BYTES, MAX_REVISION_BYTES};
 pub use snapshot::{Snapshot, SnapshotEntry};
 pub use store::ObjectStore;
 
