@@ -330,19 +330,7 @@ impl Drop for DirectoryCleanup {
 fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), ObjectError> {
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
-    use std::os::raw::{c_char, c_int};
 
-    const AT_FDCWD: c_int = -100;
-    const RENAME_NOREPLACE: u32 = 1;
-    extern "C" {
-        fn renameat2(
-            olddirfd: c_int,
-            oldpath: *const c_char,
-            newdirfd: c_int,
-            newpath: *const c_char,
-            flags: u32,
-        ) -> c_int;
-    }
     let src = CString::new(source.as_os_str().as_bytes())
         .map_err(|_| unsafe_path())?;
     let dst = CString::new(target.as_os_str().as_bytes())
@@ -350,12 +338,13 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
     // SAFETY: CString arguments are terminated and live across the call.
     // This syscall does not dereference Rust-managed memory after returning.
     let result = unsafe {
-        renameat2(
-            AT_FDCWD,
+        libc::syscall(
+            libc::SYS_renameat2,
+            libc::AT_FDCWD,
             src.as_ptr(),
-            AT_FDCWD,
+            libc::AT_FDCWD,
             dst.as_ptr(),
-            RENAME_NOREPLACE,
+            libc::RENAME_NOREPLACE,
         )
     };
     if result == 0 {
