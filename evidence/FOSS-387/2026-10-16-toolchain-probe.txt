@@ -1,0 +1,28 @@
+Case: FOSS-387 TOOLCHAIN-BLOCKER
+UTC: 2026-10-16T14:47:34Z
+Host: Linux 6.18.44 x86_64
+Working directory: /
+
+$ git --version
+git version 2.47.3
+exit=0
+
+$ rustc --version
+bash: line 9: rustc: command not found
+exit=127
+
+$ cargo --version
+bash: line 10: cargo: command not found
+exit=127
+
+$ cargo test --workspace --offline -- --nocapture
+bash: line 11: cargo: command not found
+exit=127
+
+$ cargo fmt --all -- --check
+bash: line 12: cargo: command not found
+exit=127
+
+$ cargo clippy --workspace --all-targets --offline -- -D warnings
+bash: line 13: cargo: command not found
+exit=127

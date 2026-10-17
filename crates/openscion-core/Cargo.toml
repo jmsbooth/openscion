@@ -1,0 +1,11 @@
+[package]
+name = "openscion-core"
+description = "Foundational local repository lifecycle for an independent agent-native source control system"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+path = "src/lib.rs"

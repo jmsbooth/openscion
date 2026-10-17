@@ -1,0 +1,15 @@
+[package]
+name = "openscion-cli"
+description = "Local OpenScion command-line interface"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "openscion"
+path = "src/main.rs"
+
+[dependencies]
+openscion-core = { path = "../openscion-core" }
