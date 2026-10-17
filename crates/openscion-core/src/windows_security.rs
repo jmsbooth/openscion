@@ -4,7 +4,6 @@
 //! other OS principals, not hostile same-user processes or administrators.
 //! Native Windows test execution is required before release.
 
-
 use std::ffi::{c_void, OsStr};
 use std::fs::File;
 use std::io;
@@ -59,19 +58,35 @@ struct AclSizeInformation {
 unsafe extern "system" {
     fn OpenProcessToken(process: *mut c_void, access: u32, token: *mut *mut c_void) -> i32;
     fn GetTokenInformation(
-        token: *mut c_void, class: u32, data: *mut c_void, length: u32, returned: *mut u32,
+        token: *mut c_void,
+        class: u32,
+        data: *mut c_void,
+        length: u32,
+        returned: *mut u32,
     ) -> i32;
     fn ConvertSidToStringSidW(sid: *mut c_void, text: *mut *mut u16) -> i32;
     fn ConvertStringSidToSidW(text: *const u16, sid: *mut *mut c_void) -> i32;
     fn ConvertStringSecurityDescriptorToSecurityDescriptorW(
-        text: *const u16, version: u32, descriptor: *mut *mut c_void, size: *mut u32,
+        text: *const u16,
+        version: u32,
+        descriptor: *mut *mut c_void,
+        size: *mut u32,
     ) -> i32;
     fn GetNamedSecurityInfoW(
-        name: *const u16, object_type: u32, information: u32,
-        owner: *mut *mut c_void, group: *mut *mut c_void,
-        dacl: *mut *mut c_void, sacl: *mut *mut c_void, descriptor: *mut *mut c_void,
+        name: *const u16,
+        object_type: u32,
+        information: u32,
+        owner: *mut *mut c_void,
+        group: *mut *mut c_void,
+        dacl: *mut *mut c_void,
+        sacl: *mut *mut c_void,
+        descriptor: *mut *mut c_void,
     ) -> u32;
-    fn GetSecurityDescriptorControl(descriptor: *mut c_void, control: *mut u16, revision: *mut u32) -> i32;
+    fn GetSecurityDescriptorControl(
+        descriptor: *mut c_void,
+        control: *mut u16,
+        revision: *mut u32,
+    ) -> i32;
     fn GetAclInformation(acl: *mut c_void, info: *mut c_void, size: u32, class: u32) -> i32;
     fn GetAce(acl: *mut c_void, index: u32, ace: *mut *mut c_void) -> i32;
     fn EqualSid(left: *const c_void, right: *const c_void) -> i32;
@@ -83,8 +98,13 @@ unsafe extern "system" {
     fn LocalFree(memory: *mut c_void) -> *mut c_void;
     fn CreateDirectoryW(path: *const u16, attributes: *const SecurityAttributes) -> i32;
     fn CreateFileW(
-        path: *const u16, access: u32, sharing: u32, attributes: *const SecurityAttributes,
-        disposition: u32, flags: u32, template: *mut c_void,
+        path: *const u16,
+        access: u32,
+        sharing: u32,
+        attributes: *const SecurityAttributes,
+        disposition: u32,
+        flags: u32,
+        template: *mut c_void,
     ) -> *mut c_void;
 }
 
@@ -107,15 +127,21 @@ impl Drop for Token {
     }
 }
 fn invalid_acl() -> io::Error {
-    io::Error::new(io::ErrorKind::PermissionDenied, "Windows store ACL is not private")
+    io::Error::new(
+        io::ErrorKind::PermissionDenied,
+        "Windows store ACL is not private",
+    )
 }
 fn wide(text: &OsStr) -> Vec<u16> {
     text.encode_wide().chain(Some(0)).collect()
 }
 fn path_wide(path: &Path) -> io::Result<Vec<u16>> {
     let encoded = wide(path.as_os_str());
-    if encoded.len() > 32767 || encoded[..encoded.len()-1].contains(&0) {
-        return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid Windows path"));
+    if encoded.len() > 32767 || encoded[..encoded.len() - 1].contains(&0) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid Windows path",
+        ));
     }
     Ok(encoded)
 }
@@ -131,7 +157,9 @@ fn to_sid_string(sid: *mut c_void) -> io::Result<String> {
     while len < 256 && unsafe { *text.add(len) } != 0 {
         len += 1;
     }
-    if len == 256 { return Err(invalid_acl()); }
+    if len == 256 {
+        return Err(invalid_acl());
+    }
     // SAFETY: The terminator was observed within 256 code units.
     let value = String::from_utf16(unsafe { std::slice::from_raw_parts(text, len) })
         .map_err(|_| invalid_acl())?;
@@ -153,14 +181,23 @@ fn current_sid() -> io::Result<String> {
     }
     let mut buffer = vec![0u8; length as usize];
     // SAFETY: Windows fills the discovered bounded buffer.
-    if unsafe { GetTokenInformation(
-        guard.0, TOKEN_USER_CLASS, buffer.as_mut_ptr().cast(), length, &mut length,
-    ) } == 0 {
+    if unsafe {
+        GetTokenInformation(
+            guard.0,
+            TOKEN_USER_CLASS,
+            buffer.as_mut_ptr().cast(),
+            length,
+            &mut length,
+        )
+    } == 0
+    {
         return Err(io::Error::last_os_error());
     }
     // Vec<u8> may be unaligned for a pointer-bearing TOKEN_USER.
     let user = unsafe { ptr::read_unaligned(buffer.as_ptr().cast::<SidAndAttributes>()) };
-    if user.sid.is_null() { return Err(invalid_acl()); }
+    if user.sid.is_null() {
+        return Err(invalid_acl());
+    }
     to_sid_string(user.sid)
 }
 fn sid_from_text(value: &str) -> io::Result<LocalSecurity> {
@@ -178,15 +215,20 @@ impl ProtectedDescriptor {
     fn new(directory: bool) -> io::Result<Self> {
         let user = current_sid()?;
         let flags = if directory { "OICI" } else { "" };
-        let sddl = format!(
-            "O:{user}D:P(A;{flags};FA;;;{user})(A;{flags};FA;;;SY)(A;{flags};FA;;;BA)"
-        );
+        let sddl =
+            format!("O:{user}D:P(A;{flags};FA;;;{user})(A;{flags};FA;;;SY)(A;{flags};FA;;;BA)");
         let text = wide(OsStr::new(&sddl));
         let mut descriptor: *mut c_void = null_mut();
         // SAFETY: Windows validates the SDDL and returns LocalFree memory.
-        if unsafe { ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            text.as_ptr(), SDDL_REVISION_1, &mut descriptor, null_mut(),
-        ) } == 0 {
+        if unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                text.as_ptr(),
+                SDDL_REVISION_1,
+                &mut descriptor,
+                null_mut(),
+            )
+        } == 0
+        {
             return Err(io::Error::last_os_error());
         }
         Ok(Self(LocalSecurity(descriptor)))
@@ -194,7 +236,7 @@ impl ProtectedDescriptor {
     fn attributes(&self) -> SecurityAttributes {
         SecurityAttributes {
             length: size_of::<SecurityAttributes>() as u32,
-            security_descriptor: self.0.0,
+            security_descriptor: self.0 .0,
             inherit_handle: 0,
         }
     }
@@ -215,10 +257,17 @@ pub(crate) fn create_private_file(path: &Path) -> io::Result<File> {
     let path = path_wide(path)?;
     // SAFETY: CREATE_NEW does not dereference existing names; returned handle
     // is owned and passed into File::from_raw_handle.
-    let handle = unsafe { CreateFileW(
-        path.as_ptr(), GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ,
-        &attrs, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, null_mut(),
-    ) };
+    let handle = unsafe {
+        CreateFileW(
+            path.as_ptr(),
+            GENERIC_READ | GENERIC_WRITE,
+            FILE_SHARE_READ,
+            &attrs,
+            CREATE_NEW,
+            FILE_ATTRIBUTE_NORMAL,
+            null_mut(),
+        )
+    };
     if handle as isize == -1 {
         return Err(io::Error::last_os_error());
     }
@@ -238,11 +287,18 @@ pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
     let mut security: *mut c_void = null_mut();
     // SAFETY: Windows validates the descriptor; all aliases into security
     // remain live until guard cleanup.
-    let status = unsafe { GetNamedSecurityInfoW(
-        path.as_ptr(), SE_FILE_OBJECT,
-        OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
-        &mut owner, null_mut(), &mut acl, null_mut(), &mut security,
-    ) };
+    let status = unsafe {
+        GetNamedSecurityInfoW(
+            path.as_ptr(),
+            SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+            &mut owner,
+            null_mut(),
+            &mut acl,
+            null_mut(),
+            &mut security,
+        )
+    };
     if status != 0 {
         return Err(io::Error::from_raw_os_error(status as i32));
     }
@@ -256,9 +312,7 @@ pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
     if unsafe { GetSecurityDescriptorControl(security, &mut control, &mut revision) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    if (control & (SE_DACL_PRESENT | SE_DACL_PROTECTED))
-        != (SE_DACL_PRESENT | SE_DACL_PROTECTED)
-    {
+    if (control & (SE_DACL_PRESENT | SE_DACL_PROTECTED)) != (SE_DACL_PRESENT | SE_DACL_PROTECTED) {
         return Err(invalid_acl());
     }
     let current = sid_from_text(&current_sid()?)?;
@@ -270,14 +324,21 @@ pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
     }
     let mut info = MaybeUninit::<AclSizeInformation>::zeroed();
     // SAFETY: ACL is Windows-validated and aliases the descriptor.
-    if unsafe { GetAclInformation(
-        acl, info.as_mut_ptr().cast(),
-        size_of::<AclSizeInformation>() as u32, ACL_SIZE_INFORMATION_CLASS,
-    ) } == 0 {
+    if unsafe {
+        GetAclInformation(
+            acl,
+            info.as_mut_ptr().cast(),
+            size_of::<AclSizeInformation>() as u32,
+            ACL_SIZE_INFORMATION_CLASS,
+        )
+    } == 0
+    {
         return Err(io::Error::last_os_error());
     }
     let count = unsafe { info.assume_init() }.ace_count;
-    if count != 3 { return Err(invalid_acl()); }
+    if count != 3 {
+        return Err(invalid_acl());
+    }
     let expected = [current.0, system.0, admins.0];
     let mut matched = [false; 3];
     for index in 0..count {
@@ -287,7 +348,8 @@ pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
         }
         // SAFETY: GetAce returns at least the ACE header within this ACL.
         let header = unsafe { ptr::read_unaligned(ace.cast::<AceHeader>()) };
-        if header.kind != ACCESS_ALLOWED_ACE_TYPE || header.flags & INHERITED_ACE != 0
+        if header.kind != ACCESS_ALLOWED_ACE_TYPE
+            || header.flags & INHERITED_ACE != 0
             || header.size < 16
         {
             return Err(invalid_acl());
@@ -295,15 +357,25 @@ pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
         // Win32 ACCESS_ALLOWED_ACE is [ACE_HEADER:4][MASK:4][SID:variable].
         let bytes = ace.cast::<u8>();
         let mask = unsafe { ptr::read_unaligned(bytes.add(4).cast::<u32>()) };
-        if mask != FILE_ALL_ACCESS { return Err(invalid_acl()); }
+        if mask != FILE_ALL_ACCESS {
+            return Err(invalid_acl());
+        }
         let sid = unsafe { bytes.add(8) }.cast::<c_void>();
-        let slot = expected.iter().position(|known| {
-            // SAFETY: SID inside a Windows-validated allow ACE.
-            unsafe { EqualSid(sid, *known) != 0 }
-        }).ok_or_else(invalid_acl)?;
-        if matched[slot] { return Err(invalid_acl()); }
+        let slot = expected
+            .iter()
+            .position(|known| {
+                // SAFETY: SID inside a Windows-validated allow ACE.
+                unsafe { EqualSid(sid, *known) != 0 }
+            })
+            .ok_or_else(invalid_acl)?;
+        if matched[slot] {
+            return Err(invalid_acl());
+        }
         matched[slot] = true;
     }
-    if matched.into_iter().all(|entry| entry) { Ok(()) }
-    else { Err(invalid_acl()) }
+    if matched.into_iter().all(|entry| entry) {
+        Ok(())
+    } else {
+        Err(invalid_acl())
+    }
 }
