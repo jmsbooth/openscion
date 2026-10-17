@@ -19,7 +19,7 @@ The binary is named "openscion", with two packages: "openscion-core" (library) a
 | R-005 | Return documented nonzero statuses for unsupported commands, invalid input, symlinks in the supplied path or metadata, existing repositories, malformed storage and IO failures. Unknown command never creates or modifies a repository. |
 | R-006 | Initialization refuses to overwrite an existing ".openscion" directory or file, and uses exclusive creation for both the directory and marker. Reinitialization leaves existing bytes intact. |
 | R-007 | Reject an input path containing parent traversal, including symlinks in any ancestor. Reject metadata symlinks and marker symlinks. Require the target directory to preexist. |
-| R-008 | Write marker through a freshly created staging file, flush it with sync_all, rename within the repository metadata directory, and sync that directory where supported. On interrupted setup, fail closed (not status OK). |
+| R-008 | Write marker through a freshly created staging file, flush it with sync_all, publish via an atomic no-overwrite hard link within the repository metadata directory, then remove the staging name, and sync that directory where supported. On interrupted setup, fail closed (not status OK). |
 | R-009 | Unknown flags, duplicate "--json", non-UTF8 CLI arguments, extra positional arguments, unsupported actions and malformed objects cannot cause a panic. |
 | R-010 | Do not require GitHub Actions, remote services, dependencies, user credentials or any network operation for normal runtime and tests. |
 
