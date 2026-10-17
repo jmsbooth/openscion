@@ -353,6 +353,7 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
 #[cfg(windows)]
 fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), ObjectError> {
     use std::os::windows::ffi::OsStrExt;
+    #[link(name = "kernel32")]
     extern "system" {
         fn MoveFileW(existing_name: *const u16, new_name: *const u16) -> i32;
     }
