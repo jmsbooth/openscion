@@ -109,7 +109,10 @@ fn status_before_init_is_explicit_error_and_never_creates_state() {
     let root = RepoFixture::new();
     let out = invoke(&["status", "--json", root.path().to_str().unwrap()]);
     assert_eq!(out.status.code(), Some(4));
-    assert_eq!(stdout(&out).trim(), r#"{"ok":false,"code":"E_NOT_INITIALIZED"}"#);
+    assert_eq!(
+        stdout(&out).trim(),
+        r#"{"ok":false,"code":"E_NOT_INITIALIZED"}"#
+    );
     assert!(!root.path().join(".openscion").exists());
 }
 
@@ -122,7 +125,10 @@ fn invalid_marker_and_reinit_are_distinct_errors() {
     fs::write(root.path().join(".openscion/format"), b"bad\n").unwrap();
     let invalid = invoke(&["status", "--json", name]);
     assert_eq!(invalid.status.code(), Some(6));
-    assert_eq!(stdout(&invalid).trim(), r#"{"ok":false,"code":"E_INVALID_STORE"}"#);
+    assert_eq!(
+        stdout(&invalid).trim(),
+        r#"{"ok":false,"code":"E_INVALID_STORE"}"#
+    );
 }
 
 #[test]
