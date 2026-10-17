@@ -195,6 +195,8 @@ fn metadata_directory_has_owner_only_permissions() {
     let metadata_path = root.path().join(".openscion");
     let permissions = fs::metadata(&metadata_path).unwrap().permissions().mode();
     assert_eq!(permissions & 0o077, 0, "metadata must not grant group/other access");
+    let file_mode = fs::metadata(metadata_path.join("format")).unwrap().permissions().mode();
+    assert_eq!(file_mode & 0o077, 0, "format marker must not grant group/other access");
     assert!(!metadata_path.join("format.pending").exists());
 }
 
