@@ -56,6 +56,7 @@ If the target promotion contract and test binary do not yet exist, record NOT_IM
 | PROM-015 | Start second writer process on same authority directory | Second authority is denied or safely serialized by documented single-writer lock; never split-brain |
 | PROM-016 | Measure 2, 20, 100 simultaneous contenders | Report actual p50/p95/p99 latency and throughput, CPU/memory and serialized-write bottleneck |
 | PROM-017 | Audit dependency graph, license, advisories, MSRV and lockfile hashes | No unresolved prohibited dependencies or unsupported Rust version |
+| PROM-019 | Complete a valid promotion, let original signer authorization expire or become revoked, then retry identical subject/channel/key/request; try altered payload | Identical replay recovers *the same already committed receipt* without a write or reauthorization; altered payload is rejected; no new promotion can rely on expired/revoked evidence |
 
 ## Fault injection protocol
 
