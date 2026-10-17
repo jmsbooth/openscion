@@ -121,3 +121,21 @@ All outputs and exit statuses must be retained, not just expected values. This i
 ## Qualification decision
 
 Do not close FOSS-387 until compiler, tests, interactive commands, security regression cases, and evidence review are complete. Static source inspection is not equivalent to Rust compilation or executable test coverage.
+
+
+## Additional Unix metadata-permissions security check
+
+After successful init on a disposable fixture, execute each step independently and inspect its exit status:
+
+    chmod 777 "$fixture/.openscion"
+    ./target/debug/openscion --json status "$fixture"
+    echo "exit=$?"
+    chmod 700 "$fixture/.openscion"
+    chmod 666 "$fixture/.openscion/format"
+    ./target/debug/openscion --json status "$fixture"
+    echo "exit=$?"
+    chmod 600 "$fixture/.openscion/format"
+    ./target/debug/openscion --json status "$fixture"
+    echo "exit=$?"
+
+Expected: each permissive mode fails with E_INVALID_STORE (6); after private permissions are restored, status reports unborn. This is a permissions regression test, not evidence of resistance to hostile same-UID races. Windows native inherited ACLs remain a separate mandatory review.
