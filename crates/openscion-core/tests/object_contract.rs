@@ -460,3 +460,34 @@ fn object_store_rejects_group_world_writable_shards() {
     fs::set_permissions(&shard, fs::Permissions::from_mode(0o700)).unwrap();
     assert_eq!(store.get_blob(&blob).unwrap(), b"private");
 }
+
+
+#[test]
+fn snapshot_entry_count_is_bounded_before_serialization() {
+    use openscion_core::objects::MAX_SNAPSHOT_ENTRIES;
+    let blob = ObjectId::for_content(ObjectKind::Blob, b"x");
+    let entries: Vec<_> = (0..=MAX_SNAPSHOT_ENTRIES)
+        .map(|i| entry(&format!("files/file_{i:05}.bin"), &blob, false))
+        .collect();
+    assert_eq!(
+        Snapshot::new(&entries).unwrap_err().kind,
+        ObjectErrorKind::TooLarge
+    );
+}
+
+#[test]
+fn repeated_large_blob_references_cannot_amplify_snapshot_materialization() {
+    use openscion_core::objects::MAX_SNAPSHOT_MATERIALIZED_BYTES;
+    let fixture = Fixture::new();
+    let store = fixture.store();
+    let payload = vec![0x42u8; MAX_BLOB_BYTES];
+    let blob = store.put_blob(&payload).unwrap();
+    let count = MAX_SNAPSHOT_MATERIALIZED_BYTES / MAX_BLOB_BYTES + 1;
+    let entries: Vec<_> = (0..count)
+        .map(|i| entry(&format!("files/file_{i:05}.bin"), &blob, false))
+        .collect();
+    assert_eq!(
+        store.put_snapshot(&entries).unwrap_err().kind,
+        ObjectErrorKind::TooLarge
+    );
+}
