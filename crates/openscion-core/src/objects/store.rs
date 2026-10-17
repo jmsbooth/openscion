@@ -1,7 +1,10 @@
 use super::identity::{ObjectId, ObjectKind};
 use super::safe_path::validate_path;
 use super::snapshot::{Snapshot, SnapshotEntry};
-use super::{ObjectError, ObjectErrorKind, MAX_BLOB_BYTES, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_MATERIALIZED_BYTES};
+use super::{
+    ObjectError, ObjectErrorKind, MAX_BLOB_BYTES, MAX_SNAPSHOT_BYTES,
+    MAX_SNAPSHOT_MATERIALIZED_BYTES,
+};
 use crate::{inspect_repository, is_link_like, validate_directory, ErrorCode};
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
@@ -79,11 +82,7 @@ impl ObjectStore {
     }
 
     /// Bounded repo-relative file read, used for file and manifest ingestion.
-    pub fn read_repo_file(
-        &self,
-        relative: &str,
-        limit: usize,
-    ) -> Result<Vec<u8>, ObjectError> {
+    pub fn read_repo_file(&self, relative: &str, limit: usize) -> Result<Vec<u8>, ObjectError> {
         validate_path(relative)?;
         let components: Vec<&str> = relative.split('/').collect();
         let mut current = self.root.clone();
@@ -94,9 +93,7 @@ impl ObjectStore {
                 return Err(unsafe_path());
             }
             let final_component = index == components.len() - 1;
-            if final_component && !metadata.is_file()
-                || !final_component && !metadata.is_dir()
-            {
+            if final_component && !metadata.is_file() || !final_component && !metadata.is_dir() {
                 return Err(unsafe_path());
             }
         }
@@ -107,7 +104,11 @@ impl ObjectStore {
     ///
     /// No committed revisions exist yet. This operation only exposes file
     /// bytes from a known snapshot in a disposable local workspace.
-    pub fn materialize(&self, snapshot_id: &ObjectId, destination: &Path) -> Result<(), ObjectError> {
+    pub fn materialize(
+        &self,
+        snapshot_id: &ObjectId,
+        destination: &Path,
+    ) -> Result<(), ObjectError> {
         let entries = self.get_snapshot(snapshot_id)?;
         if destination
             .components()
@@ -119,7 +120,9 @@ impl ObjectStore {
         if basename == std::ffi::OsStr::new(".") || basename == std::ffi::OsStr::new("..") {
             return Err(unsafe_path());
         }
-        let parent = destination.parent().filter(|p| !p.as_os_str().is_empty())
+        let parent = destination
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
             .unwrap_or_else(|| Path::new("."));
         let safe_parent = validate_directory(parent)
             .map_err(|error| ObjectError::new(ObjectErrorKind::UnsafePath, error.message))?;
@@ -151,7 +154,9 @@ impl ObjectStore {
                 match fs::create_dir(&dir) {
                     Ok(()) => {}
                     Err(error) if error.kind() == ErrorKind::AlreadyExists => {}
-                    Err(error) => return Err(ObjectError::io("create materialized directory", error)),
+                    Err(error) => {
+                        return Err(ObjectError::io("create materialized directory", error))
+                    }
                 }
                 let metadata = metadata(&dir)?;
                 if is_link_like(&metadata) || !metadata.is_dir() {
@@ -192,7 +197,11 @@ impl ObjectStore {
         Ok(())
     }
 
-    pub(crate) fn put_object(&self, kind: ObjectKind, bytes: &[u8]) -> Result<ObjectId, ObjectError> {
+    pub(crate) fn put_object(
+        &self,
+        kind: ObjectKind,
+        bytes: &[u8],
+    ) -> Result<ObjectId, ObjectError> {
         let limit = object_limit(kind);
         if bytes.len() > limit {
             return Err(ObjectError::new(
@@ -331,10 +340,8 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
     use std::ffi::CString;
     use std::os::unix::ffi::OsStrExt;
 
-    let src = CString::new(source.as_os_str().as_bytes())
-        .map_err(|_| unsafe_path())?;
-    let dst = CString::new(target.as_os_str().as_bytes())
-        .map_err(|_| unsafe_path())?;
+    let src = CString::new(source.as_os_str().as_bytes()).map_err(|_| unsafe_path())?;
+    let dst = CString::new(target.as_os_str().as_bytes()).map_err(|_| unsafe_path())?;
     // SAFETY: CString arguments are terminated and live across the call.
     // This syscall does not dereference Rust-managed memory after returning.
     let result = unsafe {
@@ -357,7 +364,10 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
             "materialization destination already exists",
         ));
     }
-    Err(ObjectError::io("publish directory without overwrite", error))
+    Err(ObjectError::io(
+        "publish directory without overwrite",
+        error,
+    ))
 }
 
 #[cfg(windows)]
@@ -382,7 +392,10 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
             "materialization destination already exists",
         ));
     }
-    Err(ObjectError::io("publish directory without overwrite", error))
+    Err(ObjectError::io(
+        "publish directory without overwrite",
+        error,
+    ))
 }
 
 #[cfg(not(any(target_os = "linux", windows)))]
@@ -461,7 +474,8 @@ fn create_private_file(path: &Path) -> Result<File, ObjectError> {
         use std::os::unix::fs::OpenOptionsExt;
         opts.mode(0o600);
     }
-    opts.open(path).map_err(|error| ObjectError::io("create exclusive file", error))
+    opts.open(path)
+        .map_err(|error| ObjectError::io("create exclusive file", error))
 }
 
 fn metadata(path: &Path) -> Result<fs::Metadata, ObjectError> {
@@ -525,5 +539,8 @@ fn sync_directory(path: &Path) -> Result<(), ObjectError> {
 }
 
 fn unsafe_path() -> ObjectError {
-    ObjectError::new(ObjectErrorKind::UnsafePath, "object path is unsafe or contains a link")
+    ObjectError::new(
+        ObjectErrorKind::UnsafePath,
+        "object path is unsafe or contains a link",
+    )
 }
