@@ -14,7 +14,10 @@ struct Fixture(PathBuf);
 
 impl Fixture {
     fn new() -> Self {
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
         let root = std::env::temp_dir().join(format!(
             "openscion-cas-{}-{}-{}",
             std::process::id(),
@@ -86,7 +89,10 @@ fn blob_store_is_deterministic_and_returns_original_bytes() {
     assert_eq!(first, second);
     assert_eq!(store.get_blob(&first).unwrap(), payload);
     assert_eq!(fs::read(fixture.object_path(&first)).unwrap(), payload);
-    assert!(!fixture.object_path(&first).with_extension("pending").exists());
+    assert!(!fixture
+        .object_path(&first)
+        .with_extension("pending")
+        .exists());
     assert_ne!(store.put_blob(b"other").unwrap(), first);
 }
 
@@ -98,8 +104,14 @@ fn corrupt_stored_bytes_are_detected_and_not_replaced() {
     let id = store.put_blob(original).unwrap();
     let path = fixture.object_path(&id);
     fs::write(&path, b"tainted").unwrap();
-    assert_eq!(store.get_blob(&id).unwrap_err().kind, ObjectErrorKind::Corrupt);
-    assert_eq!(store.put_blob(original).unwrap_err().kind, ObjectErrorKind::Corrupt);
+    assert_eq!(
+        store.get_blob(&id).unwrap_err().kind,
+        ObjectErrorKind::Corrupt
+    );
+    assert_eq!(
+        store.put_blob(original).unwrap_err().kind,
+        ObjectErrorKind::Corrupt
+    );
     assert_eq!(fs::read(path).unwrap(), b"tainted");
 }
 
@@ -157,7 +169,10 @@ fn snapshot_encoding_is_order_independent_and_has_golden_empty_id() {
     assert_eq!(id1, id2);
     assert_eq!(store.get_snapshot(&id1).unwrap(), second);
     let bytes = fs::read(fixture.object_path(&id1)).unwrap();
-    assert_eq!(Snapshot::decode(&bytes).unwrap().entries(), second.as_slice());
+    assert_eq!(
+        Snapshot::decode(&bytes).unwrap().entries(),
+        second.as_slice()
+    );
 
     let empty = store.put_snapshot(&[]).unwrap();
     assert_eq!(
@@ -196,14 +211,19 @@ fn invalid_paths_and_case_or_prefix_collisions_are_refused() {
         "trailing.",
     ] {
         assert_eq!(
-            store.put_snapshot(&[entry(path, &blob, false)])
+            store
+                .put_snapshot(&[entry(path, &blob, false)])
                 .unwrap_err()
                 .kind,
             ObjectErrorKind::UnsafePath,
             "{path}"
         );
     }
-    for paths in [("ReadMe.md", "README.md"), ("src", "src/main.rs"), ("src/a", "SRC/A")] {
+    for paths in [
+        ("ReadMe.md", "README.md"),
+        ("src", "src/main.rs"),
+        ("src/a", "SRC/A"),
+    ] {
         let entries = [entry(paths.0, &blob, false), entry(paths.1, &blob, false)];
         assert_eq!(
             store.put_snapshot(&entries).unwrap_err().kind,
@@ -218,8 +238,10 @@ fn missing_or_damaged_blob_prevents_snapshot_publication_or_reads() {
     let store = fixture.store();
     let missing = ObjectId::for_content(ObjectKind::Blob, b"not-uploaded");
     assert_eq!(
-        store.put_snapshot(&[entry("a.txt", &missing, false)])
-            .unwrap_err().kind,
+        store
+            .put_snapshot(&[entry("a.txt", &missing, false)])
+            .unwrap_err()
+            .kind,
         ObjectErrorKind::Missing
     );
     let blob = store.put_blob(b"original").unwrap();
@@ -274,13 +296,18 @@ fn materialize_round_trips_content_and_never_overwrites() {
     let store = fixture.store();
     let one = store.put_blob(b"fn one() {}\n").unwrap();
     let two = store.put_blob(b"#!/bin/sh\necho fine\n").unwrap();
-    let id = store.put_snapshot(&[
-        entry("src/main.rs", &one, false),
-        entry("scripts/test.sh", &two, true)
-    ]).unwrap();
+    let id = store
+        .put_snapshot(&[
+            entry("src/main.rs", &one, false),
+            entry("scripts/test.sh", &two, true),
+        ])
+        .unwrap();
     let target = fixture.path().join("checkout");
     store.materialize(&id, &target).unwrap();
-    assert_eq!(fs::read(target.join("src/main.rs")).unwrap(), b"fn one() {}\n");
+    assert_eq!(
+        fs::read(target.join("src/main.rs")).unwrap(),
+        b"fn one() {}\n"
+    );
     assert_eq!(
         fs::read(target.join("scripts/test.sh")).unwrap(),
         b"#!/bin/sh\necho fine\n"
@@ -294,8 +321,14 @@ fn materialize_round_trips_content_and_never_overwrites() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let regular = fs::metadata(target.join("src/main.rs")).unwrap().permissions().mode();
-        let executable = fs::metadata(target.join("scripts/test.sh")).unwrap().permissions().mode();
+        let regular = fs::metadata(target.join("src/main.rs"))
+            .unwrap()
+            .permissions()
+            .mode();
+        let executable = fs::metadata(target.join("scripts/test.sh"))
+            .unwrap()
+            .permissions()
+            .mode();
         assert_eq!(regular & 0o111, 0);
         assert_ne!(executable & 0o100, 0);
     }
@@ -313,8 +346,10 @@ fn materialize_rejects_symlink_destination() {
         fs::create_dir(&outside).unwrap();
         symlink(&outside, fixture.path().join("alias")).unwrap();
         assert_eq!(
-            store.materialize(&snapshot, &fixture.path().join("alias/new"))
-                .unwrap_err().kind,
+            store
+                .materialize(&snapshot, &fixture.path().join("alias/new"))
+                .unwrap_err()
+                .kind,
             ObjectErrorKind::UnsafePath
         );
         assert!(!outside.join("new").exists());
@@ -346,9 +381,14 @@ fn parallel_same_blob_writers_preserve_one_valid_object() {
     let mut workers = Vec::new();
     for _ in 0..12 {
         let shared = store.clone();
-        workers.push(std::thread::spawn(move || shared.put_blob(b"same").unwrap()));
+        workers.push(std::thread::spawn(move || {
+            shared.put_blob(b"same").unwrap()
+        }));
     }
-    let ids: Vec<_> = workers.into_iter().map(|worker| worker.join().unwrap()).collect();
+    let ids: Vec<_> = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect();
     assert!(ids.iter().all(|id| id == &ids[0]));
     assert_eq!(store.get_blob(&ids[0]).unwrap(), b"same");
 }
@@ -383,7 +423,11 @@ fn abandoned_staging_file_is_not_a_published_object() {
             fs::set_permissions(directory, fs::Permissions::from_mode(0o700)).unwrap();
         }
     }
-    fs::write(shard.join(".openscion-object-abandoned"), b"unverified partial").unwrap();
+    fs::write(
+        shard.join(".openscion-object-abandoned"),
+        b"unverified partial",
+    )
+    .unwrap();
     assert_eq!(
         store.get_blob(&id).unwrap_err().kind,
         ObjectErrorKind::Missing
@@ -414,7 +458,6 @@ fn symlinked_object_shard_is_refused_even_with_valid_target_bytes() {
     );
 }
 
-
 #[test]
 fn decoded_snapshot_with_unsafe_path_returns_invalid_snapshot_type() {
     let blob = ObjectId::for_content(ObjectKind::Blob, b"safe");
@@ -427,7 +470,7 @@ fn decoded_snapshot_with_unsafe_path_returns_invalid_snapshot_type() {
     let text = blob.to_string();
     let mut digest = [0u8; 32];
     for i in 0..32 {
-        digest[i] = u8::from_str_radix(&text[(3 + 2*i)..(5 + 2*i)],16).unwrap();
+        digest[i] = u8::from_str_radix(&text[(3 + 2 * i)..(5 + 2 * i)], 16).unwrap();
     }
     raw.extend_from_slice(&digest);
     assert_eq!(
@@ -435,7 +478,6 @@ fn decoded_snapshot_with_unsafe_path_returns_invalid_snapshot_type() {
         ObjectErrorKind::InvalidSnapshot
     );
 }
-
 
 #[cfg(unix)]
 #[test]
@@ -471,7 +513,6 @@ fn object_store_rejects_group_world_writable_shards() {
     fs::set_permissions(&shard, fs::Permissions::from_mode(0o700)).unwrap();
     assert_eq!(store.get_blob(&blob).unwrap(), b"private");
 }
-
 
 #[test]
 fn snapshot_entry_count_is_bounded_before_serialization() {
