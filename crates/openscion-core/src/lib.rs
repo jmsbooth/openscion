@@ -113,7 +113,10 @@ pub(crate) fn is_link_like(metadata: &fs::Metadata) -> bool {
 /// M1 does not claim race-free containment against that attacker.
 pub(crate) fn validate_directory(path: &Path) -> Result<PathBuf, StoreError> {
     if path.as_os_str().is_empty() {
-        return Err(StoreError::new(ErrorCode::UnsafePath, "empty repository path"));
+        return Err(StoreError::new(
+            ErrorCode::UnsafePath,
+            "empty repository path",
+        ));
     }
     if path.components().any(|part| part == Component::ParentDir) {
         return Err(StoreError::new(
@@ -124,9 +127,7 @@ pub(crate) fn validate_directory(path: &Path) -> Result<PathBuf, StoreError> {
 
     // Windows drive-relative paths (for example "C:relative") resolve
     // against drive-specific process state and must not be accepted.
-    if !path.is_absolute()
-        && matches!(path.components().next(), Some(Component::Prefix(_)))
-    {
+    if !path.is_absolute() && matches!(path.components().next(), Some(Component::Prefix(_))) {
         return Err(StoreError::new(
             ErrorCode::UnsafePath,
             "drive-relative repository paths are forbidden",
@@ -359,6 +360,5 @@ pub fn inspect_repository(path: &Path) -> Result<RepositoryInfo, StoreError> {
         state: RepositoryState::Unborn,
     })
 }
-
 
 pub mod objects;
