@@ -127,7 +127,7 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
     match arguments.as_slice() {
         ["--help"] | ["-h"] | ["help"] => Ok(Reply::new(
             concat!(
-                "OpenScion local bootstrap (no revisions or promotions)\n",
+                "OpenScion local candidate store (promotion and rollback pending)\n",
                 "Usage:\n",
                 "  openscion --help\n",
                 "  openscion --version\n",
@@ -157,10 +157,10 @@ fn run(raw: &[String]) -> Result<Reply, CliFailure> {
         )),
         ["doctor"] => Ok(Reply::new(
             concat!(
-                "OpenScion local-only bootstrap\n",
-                "Implemented: init, status, blob put/verify, snapshot put/show/materialize\n",
+                "OpenScion local immutable candidate store\n",
+                "Implemented: init, status, blob put/verify, snapshot put/show/materialize, proposal create/show, revision create/show/ancestry\n",
                 "Pending: promote, rollback\n",
-                "Storage: local format marker only (no revision storage)\n",
+                "Storage: immutable blobs, snapshots and unpromoted revisions\n",
             ),
             r#"{"ok":true,"command":"doctor","implemented":["init","status","blob put","blob verify","snapshot put","snapshot show","snapshot materialize","proposal create","proposal show","revision create","revision show","revision ancestry"],"pending":["promote","rollback"],"storage":"local-cas-v1"}"#,
         )),
@@ -193,9 +193,9 @@ fn bootstrap(command: &'static str, path: &str) -> Result<Reply, CliFailure> {
     }
 
     let human = if command == "init" {
-        "Initialized OpenScion local store (unborn; no revisions)"
+        "Initialized OpenScion local store (unborn; no promoted head)"
     } else {
-        "OpenScion local store: unborn (no revisions)"
+        "OpenScion local store: unborn (no promoted head)"
     };
 
     Ok(Reply::new(
