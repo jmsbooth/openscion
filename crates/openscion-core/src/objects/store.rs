@@ -1,7 +1,7 @@
 use super::identity::{ObjectId, ObjectKind};
 use super::safe_path::validate_path;
 use super::snapshot::{Snapshot, SnapshotEntry};
-use super::{ObjectError, ObjectErrorKind, MAX_BLOB_BYTES, MAX_SNAPSHOT_BYTES};
+use super::{ObjectError, ObjectErrorKind, MAX_BLOB_BYTES, MAX_SNAPSHOT_BYTES, MAX_SNAPSHOT_MATERIALIZED_BYTES};
 use crate::{inspect_repository, is_link_like, validate_directory, ErrorCode};
 use std::fs::{self, File, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
@@ -43,20 +43,32 @@ impl ObjectStore {
 
     pub fn put_snapshot(&self, entries: &[SnapshotEntry]) -> Result<ObjectId, ObjectError> {
         let snapshot = Snapshot::new(entries)?;
-        for entry in snapshot.entries() {
-            // Never accept an unverified or missing referenced blob.
-            self.get_blob(&entry.blob)?;
-        }
+        self.verify_snapshot_entries(snapshot.entries())?;
         self.put_object(ObjectKind::Snapshot, &snapshot.encode())
     }
 
     pub fn get_snapshot(&self, id: &ObjectId) -> Result<Vec<SnapshotEntry>, ObjectError> {
         let bytes = self.get_object(id, ObjectKind::Snapshot)?;
         let entries = Snapshot::decode(&bytes)?.entries().to_vec();
-        for entry in &entries {
-            self.get_blob(&entry.blob)?;
-        }
+        self.verify_snapshot_entries(&entries)?;
         Ok(entries)
+    }
+
+    fn verify_snapshot_entries(&self, entries: &[SnapshotEntry]) -> Result<(), ObjectError> {
+        let mut aggregate_bytes = 0usize;
+        for entry in entries {
+            let bytes = self.get_blob(&entry.blob)?;
+            aggregate_bytes = aggregate_bytes.checked_add(bytes.len()).ok_or_else(|| {
+                ObjectError::new(ObjectErrorKind::TooLarge, "snapshot content size overflow")
+            })?;
+            if aggregate_bytes > MAX_SNAPSHOT_MATERIALIZED_BYTES {
+                return Err(ObjectError::new(
+                    ObjectErrorKind::TooLarge,
+                    "snapshot exceeds local materialization budget",
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Import a source file from inside the repository using a portable
