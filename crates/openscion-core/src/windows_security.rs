@@ -4,7 +4,6 @@
 //! other OS principals, not hostile same-user processes or administrators.
 //! Native Windows test execution is required before release.
 
-#![cfg(windows)]
 
 use std::ffi::{c_void, OsStr};
 use std::fs::File;
