@@ -29,9 +29,7 @@ pub(crate) fn validate_path(path: &str) -> Result<(), ObjectError> {
         }
         // Prevent embedded source-control metadata from being materialized
         // into an agent workspace, not just metadata at repository root.
-        if component.eq_ignore_ascii_case(".openscion")
-            || component.eq_ignore_ascii_case(".git")
-        {
+        if component.eq_ignore_ascii_case(".openscion") || component.eq_ignore_ascii_case(".git") {
             return Err(unsafe_path());
         }
 
@@ -78,5 +76,8 @@ pub(crate) fn validate_entry_paths<'a>(
 }
 
 fn unsafe_path() -> ObjectError {
-    ObjectError::new(ObjectErrorKind::UnsafePath, "unsafe or nonportable snapshot path")
+    ObjectError::new(
+        ObjectErrorKind::UnsafePath,
+        "unsafe or nonportable snapshot path",
+    )
 }
