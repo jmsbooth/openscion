@@ -1,0 +1,10 @@
+[package]
+name = "osc-redb-eval"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+[dependencies]
+redb = "=2.6.4"
+
+[workspace]
+# Deliberately isolated from the OpenScion production workspace.

@@ -1,0 +1,168 @@
+{
+  "kill_tests": 20,
+  "protocol": "openscion.redb.backend-eval.v1",
+  "races": [
+    2,
+    20,
+    100
+  ],
+  "redb": "2.6.4",
+  "results": [
+    {
+      "iteration": 0,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 0,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 1,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 1,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 2,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 2,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 3,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 3,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 4,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 4,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 5,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 5,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 6,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 6,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 7,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 7,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 8,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 8,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 9,
+      "observed_status": "head=;seq=0;receipts=0;idempotency=0",
+      "passed": true,
+      "point": "before-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "iteration": 9,
+      "observed_status": "head=r1_candidate;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "point": "after-commit",
+      "signal": "SIGKILL"
+    },
+    {
+      "output": "race=2;wins=1;head_conflicts=1\nhead=r1_0;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "race": 2
+    },
+    {
+      "output": "race=20;wins=1;head_conflicts=19\nhead=r1_9;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "race": 20
+    },
+    {
+      "output": "race=100;wins=1;head_conflicts=99\nhead=r1_99;seq=1;receipts=1;idempotency=1",
+      "passed": true,
+      "race": 100
+    }
+  ],
+  "rust": "1.85.1"
+}
