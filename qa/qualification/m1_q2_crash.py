@@ -181,6 +181,16 @@ def run(args: argparse.Namespace) -> dict:
             os.fsync(out.fileno())
             os.fsync(err.fileno())
         duration_ms = int((time.monotonic() - start) * 1000)
+        initial_id = None
+        if not interrupted:
+            # A successful natural completion is part of the contract too;
+            # silently ignoring failures here would produce false evidence.
+            initial = assert_ok_json((process.returncode, stdout.read_bytes(),
+                                      stderr.read_bytes()), "blob put")
+            initial_id = initial.get("id")
+        else:
+            require(process.returncode != 0,
+                    f"attempt {iteration}: interruption claimed but process exited cleanly")
         # A subsequent fresh process must be able to write the same immutable
         # content or retrieve the already-published object after a crash.
         repaired = assert_ok_json(execute(binary, ["blob", "put", "--json",
@@ -188,6 +198,8 @@ def run(args: argparse.Namespace) -> dict:
         blob_id = repaired.get("id")
         require(isinstance(blob_id, str) and blob_id.startswith("b1_") and len(blob_id) == 67
                 and set(blob_id[3:]) <= HEX40, f"attempt {iteration}: invalid immutable blob ID")
+        if initial_id is not None:
+            require(initial_id == blob_id, f"attempt {iteration}: natural and retry IDs diverge")
         verified = assert_ok_json(execute(binary, ["blob", "verify", "--json",
                                                    str(fixture), blob_id]), "blob verify")
         require(verified.get("id") == blob_id and verified.get("bytes") == len(data),
