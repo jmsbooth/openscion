@@ -24,9 +24,11 @@ Resolve reviewed Cargo dependencies explicitly on an approved workstation before
 ## Native NTFS security and functional evidence
 
 ```powershell
+$root = (git rev-parse --show-toplevel).Trim()
+$sha = (git rev-parse HEAD).Trim()
 $bin = (Resolve-Path .\target\debug\openscion.exe).Path
 $evidence = Join-Path $env:TEMP ("openscion-m1-review-" + [guid]::NewGuid().ToString("N"))
-pwsh -NoProfile -File qa/windows/M1-Qualification.ps1 -Binary $bin -ArtifactDir $evidence -Contenders 20
+pwsh -NoProfile -File qa/windows/M1-Qualification.ps1 -Binary $bin -SourceRoot $root -ExpectedHead $sha -ArtifactDir $evidence -Contenders 20
 $LASTEXITCODE
 Get-Content -Raw (Join-Path $evidence 'summary.json')
 Get-ChildItem $evidence | Select-Object Name, Length
@@ -47,3 +49,9 @@ Use the observed result artifacts to review:
 - reviewer identity, decision, remediation commit SHA and retest.
 
 Do not merge PR #2, #3 or #4 merely because GitHub shows `mergeable`. FOSS-484 (Windows DACL) and native recovery qualification remain mandatory. FOSS-485 (orphan reclamation) is a separate high-scale operational increment.
+
+## M1-Q2 qualification hardening (source staged, native execution outstanding)
+
+The runner now requires a clean checkout and an exact Git commit with `-SourceRoot` and `-ExpectedHead`. It refuses to overwrite an existing evidence directory and requires a local fixed NTFS evidence volume without reparse-point ancestors. The concurrency harness drains stdout/stderr concurrently, enforces one 30-second deadline for the entire group, terminates remaining children on failure, and fails if `icacls` cannot inspect the ACL. These are source-level corrections, **not** evidence that native NTFS qualification passed.
+
+The runner's source SHA and binary SHA in its JSON output are metadata, not authenticated build provenance. Execute with the FOSS-488 external evidence-capture helper on a real Windows host, archive the raw logs, independently compare the executable to its reviewed source/build provenance, and obtain an independent security decision. Windows process kill/restart at exact publication boundaries and power-loss durability are still separate NOT_RUN requirements. 
