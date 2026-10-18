@@ -362,13 +362,10 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
         return Ok(());
     }
     let error = std::io::Error::last_os_error();
-    // MoveFileW must refuse an existing target. Windows can report either
-    // ERROR_ALREADY_EXISTS, ERROR_FILE_EXISTS or ERROR_ACCESS_DENIED for a
-    // destination already present (especially an existing directory).
-    // Map to a conflict only when a real, non-reparse destination exists.
-    if error.kind() == ErrorKind::AlreadyExists
-        || matches!(error.raw_os_error(), Some(5 | 80 | 183))
-    {
+    // Linux renameat2(RENAME_NOREPLACE) reports EEXIST for a real
+    // destination collision. Do not interpret unrelated errno values
+    // (EIO=5, e.g. media failure) as a successful conflict observation.
+    if error.kind() == ErrorKind::AlreadyExists {
         if let Ok(attributes) = fs::symlink_metadata(target) {
             if is_link_like(&attributes) {
                 return Err(unsafe_path());
@@ -402,11 +399,21 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
         return Ok(());
     }
     let error = std::io::Error::last_os_error();
-    if error.kind() == ErrorKind::AlreadyExists {
-        return Err(ObjectError::new(
-            ObjectErrorKind::AlreadyExists,
-            "materialization destination already exists",
-        ));
+    // MoveFileW may report ERROR_ACCESS_DENIED for an existing directory,
+    // or ERROR_FILE_EXISTS/ALREADY_EXISTS. Confirm a real target exists
+    // before translating these errors; never hide an unrelated ACL failure.
+    if error.kind() == ErrorKind::AlreadyExists
+        || matches!(error.raw_os_error(), Some(5 | 80 | 183))
+    {
+        if let Ok(attributes) = fs::symlink_metadata(target) {
+            if is_link_like(&attributes) {
+                return Err(unsafe_path());
+            }
+            return Err(ObjectError::new(
+                ObjectErrorKind::AlreadyExists,
+                "materialization destination already exists",
+            ));
+        }
     }
     Err(ObjectError::io(
         "publish directory without overwrite",
