@@ -82,9 +82,18 @@ impl Fixture {
             policy_epoch: 3,
         };
         Self {
-            request, statement, signed, policy, issuers,
-            revocation: RevocationState { epoch: 11, fresh_until: NOW + 600 },
-            nonces: BTreeSet::new(), now: Some(NOW), subject: SUBJECT.into(),
+            request,
+            statement,
+            signed,
+            policy,
+            issuers,
+            revocation: RevocationState {
+                epoch: 11,
+                fresh_until: NOW + 600,
+            },
+            nonces: BTreeSet::new(),
+            now: Some(NOW),
+            subject: SUBJECT.into(),
             audience: AUDIENCE.into(),
             evidence_bytes,
         }
@@ -135,14 +144,26 @@ fn valid_independent_signed_review_is_verified() {
 #[test]
 fn deterministic_domain_separated_request_fingerprint() {
     let f = Fixture::new();
-    assert_eq!(f.request.fingerprint(SUBJECT).unwrap(), f.statement.request_fingerprint);
-    assert_ne!(f.request.fingerprint("agent02").unwrap(), f.statement.request_fingerprint);
+    assert_eq!(
+        f.request.fingerprint(SUBJECT).unwrap(),
+        f.statement.request_fingerprint
+    );
+    assert_ne!(
+        f.request.fingerprint("agent02").unwrap(),
+        f.statement.request_fingerprint
+    );
     let mut r = f.request.clone();
     r.idempotency_key.push('x');
-    assert_ne!(r.fingerprint(SUBJECT).unwrap(), f.statement.request_fingerprint);
+    assert_ne!(
+        r.fingerprint(SUBJECT).unwrap(),
+        f.statement.request_fingerprint
+    );
     let mut r = f.request.clone();
     r.expected_head = Some(format!("r1_{}", "b".repeat(64)));
-    assert_ne!(r.fingerprint(SUBJECT).unwrap(), f.statement.request_fingerprint);
+    assert_ne!(
+        r.fingerprint(SUBJECT).unwrap(),
+        f.statement.request_fingerprint
+    );
 }
 
 #[test]
@@ -315,10 +336,16 @@ fn rejects_self_approval_using_trusted_issuer_identity() {
 #[test]
 fn rejects_nonce_replay_without_state_mutation() {
     let mut f = Fixture::new();
-    let nonce = NonceKey { issuer_key_id: ISSUER_ID.into(), nonce: f.statement.nonce };
+    let nonce = NonceKey {
+        issuer_key_id: ISSUER_ID.into(),
+        nonce: f.statement.nonce,
+    };
     f.nonces.insert(nonce.clone());
     f.reject(VerifyError::NonceReplay);
-    assert!(f.nonces.contains(&nonce), "verifier must not consume nonce on denial");
+    assert!(
+        f.nonces.contains(&nonce),
+        "verifier must not consume nonce on denial"
+    );
 }
 
 #[test]
