@@ -14,6 +14,7 @@ from pathlib import Path
 import platform
 import subprocess
 import sys
+import tempfile
 import time
 
 HEX40 = set("0123456789abcdef")
@@ -88,8 +89,16 @@ def payload(index: int) -> bytes:
 
 
 def execute(binary: Path, args: list[str], timeout: float = 30) -> tuple[int, bytes, bytes]:
-    proc = subprocess.run([str(binary), *args], check=False, capture_output=True, timeout=timeout)
-    return proc.returncode, proc.stdout, proc.stderr
+    # Use files, not capture_output=True: a hostile or broken binary must not
+    # cause unbounded Python heap usage while the subprocess is running.
+    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+        proc = subprocess.run([str(binary), *args], check=False,
+                              stdout=stdout, stderr=stderr, timeout=timeout)
+        require(stdout.tell() <= 131072 and stderr.tell() <= 131072,
+                "native CLI generated oversized response streams")
+        stdout.seek(0)
+        stderr.seek(0)
+        return proc.returncode, stdout.read(), stderr.read()
 
 
 def assert_ok_json(result: tuple[int, bytes, bytes], command: str) -> dict:
