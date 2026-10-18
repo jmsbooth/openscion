@@ -135,7 +135,7 @@ fn invalid_acl() -> io::Error {
 fn wide(text: &OsStr) -> Vec<u16> {
     text.encode_wide().chain(Some(0)).collect()
 }
-fn path_wide(path: &Path) -> io::Result<Vec<u16>> {
+pub(crate) fn path_wide(path: &Path) -> io::Result<Vec<u16>> {
     let encoded = wide(path.as_os_str());
     if encoded.len() > 32767 || encoded[..encoded.len() - 1].contains(&0) {
         return Err(io::Error::new(
@@ -179,23 +179,47 @@ fn current_sid() -> io::Result<String> {
     if (length as usize) < size_of::<SidAndAttributes>() || length > 65536 {
         return Err(invalid_acl());
     }
-    let mut buffer = vec![0u8; length as usize];
-    // SAFETY: Windows fills the discovered bounded buffer.
+    // TOKEN_USER contains a native pointer. A Vec<u8> has alignment 1,
+    // so allocate pointer-sized words to meet native structure alignment.
+    let words = (length as usize).div_ceil(size_of::<usize>());
+    let mut buffer = vec![0usize; words];
+    let capacity = (buffer.len() * size_of::<usize>()) as u32;
+    let mut returned = 0u32;
+    // SAFETY: Buffer has native pointer alignment and capacity describes its
+    // full allocated size. Windows never writes beyond that capacity.
     if unsafe {
         GetTokenInformation(
             guard.0,
             TOKEN_USER_CLASS,
             buffer.as_mut_ptr().cast(),
-            length,
-            &mut length,
+            capacity,
+            &mut returned,
         )
     } == 0
     {
         return Err(io::Error::last_os_error());
     }
-    // Vec<u8> may be unaligned for a pointer-bearing TOKEN_USER.
-    let user = unsafe { ptr::read_unaligned(buffer.as_ptr().cast::<SidAndAttributes>()) };
+    if (returned as usize) < size_of::<SidAndAttributes>() || returned > capacity {
+        return Err(invalid_acl());
+    }
+    // SAFETY: GetTokenInformation returned at least a complete TOKEN_USER.
+    let user = unsafe { ptr::read(buffer.as_ptr().cast::<SidAndAttributes>()) };
     if user.sid.is_null() {
+        return Err(invalid_acl());
+    }
+    // The returned SID must be contained entirely in the token-info buffer.
+    // Validate before passing its pointer into another FFI routine.
+    let begin = buffer.as_ptr() as usize;
+    let end = begin + returned as usize;
+    let sid = user.sid as usize;
+    if sid < begin || sid.checked_add(8).is_none_or(|v| v > end) {
+        return Err(invalid_acl());
+    }
+    // SAFETY: The fixed eight-byte SID header is within the returned buffer.
+    let header = unsafe { std::slice::from_raw_parts(user.sid.cast::<u8>(), 8) };
+    let count = header[1] as usize;
+    let sid_size = 8 + count * 4;
+    if header[0] != 1 || count > 15 || sid.checked_add(sid_size).is_none_or(|v| v > end) {
         return Err(invalid_acl());
     }
     to_sid_string(user.sid)
@@ -354,10 +378,23 @@ pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
         {
             return Err(invalid_acl());
         }
-        // Win32 ACCESS_ALLOWED_ACE is [ACE_HEADER:4][MASK:4][SID:variable].
+        // Win32 ACCESS_ALLOWED_ACE: header (4), mask (4), variable SID.
+        // Validate the encoded SID's entire length against ACE_HEADER::AceSize
+        // before allowing EqualSid to dereference attacker-modifiable bytes.
         let bytes = ace.cast::<u8>();
         let mask = unsafe { ptr::read_unaligned(bytes.add(4).cast::<u32>()) };
         if mask != FILE_ALL_ACCESS {
+            return Err(invalid_acl());
+        }
+        // SAFETY: The checked ACE size is at least 16, leaving a complete
+        // eight-byte fixed SID header starting at offset 8.
+        let sid_header = unsafe { std::slice::from_raw_parts(bytes.add(8), 8) };
+        let sub_authorities = sid_header[1] as usize;
+        let sid_length = 8 + 4 * sub_authorities;
+        if sid_header[0] != 1
+            || sub_authorities > 15
+            || 8 + sid_length > header.size as usize
+        {
             return Err(invalid_acl());
         }
         let sid = unsafe { bytes.add(8) }.cast::<c_void>();
