@@ -227,6 +227,12 @@ def verify_case(case_dir: Path, expected_sha: str) -> tuple[str, str]:
     ensure(entry["clean_before"] is True and entry["clean_after"] is True,
            "source tree not clean")
     ensure(entry["host_system"] in {"Linux", "Windows", "Darwin"}, "unrecognized system")
+    ensure(isinstance(entry["python_version"], str) and len(entry["python_version"]) <= 64,
+           "invalid Python version")
+    ensure(isinstance(entry["started_utc"], str) and len(entry["started_utc"]) <= 64,
+           "invalid start timestamp")
+    ensure(type(entry["elapsed_ms"]) is int and 0 <= entry["elapsed_ms"] <= 3600_000,
+           "invalid elapsed duration")
     ensure(type(entry["expected_exit"]) is int and 0 <= entry["expected_exit"] <= 255,
            "invalid expected exit")
     ensure(type(entry["exit_code"]) is int and entry["exit_code"] == entry["expected_exit"],
