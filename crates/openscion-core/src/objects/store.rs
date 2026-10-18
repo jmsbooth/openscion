@@ -362,8 +362,10 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
         return Ok(());
     }
     let error = std::io::Error::last_os_error();
-    // Windows may return access-denied for an existing directory, rather
-    // than already-exists. Only normalize if the destination really exists.
+    // MoveFileW must refuse an existing target. Windows can report either
+    // ERROR_ALREADY_EXISTS, ERROR_FILE_EXISTS or ERROR_ACCESS_DENIED for a
+    // destination already present (especially an existing directory).
+    // Map to a conflict only when a real, non-reparse destination exists.
     if error.kind() == ErrorKind::AlreadyExists
         || matches!(error.raw_os_error(), Some(5 | 80 | 183))
     {
@@ -389,7 +391,8 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
     extern "system" {
         fn MoveFileW(existing_name: *const u16, new_name: *const u16) -> i32;
     }
-    // Validate NULs and Win32 path length before publication to avoid truncation.
+    // Reject embedded NULs and overlong paths before passing them into Win32.
+    // A truncated path could otherwise publish under an unintended name.
     let source_wide = crate::windows_security::path_wide(source).map_err(|_| unsafe_path())?;
     let target_wide = crate::windows_security::path_wide(target).map_err(|_| unsafe_path())?;
     // SAFETY: Both terminated UTF-16 buffers remain allocated throughout
