@@ -131,6 +131,11 @@ else:
             self.assertTrue(all(o['retry_verified'] for o in result['observations']))
             self.assertTrue((root/'evidence'/'summary.json').exists())
 
+    def test_oversized_native_command_output_is_rejected(self):
+        with self.assertRaisesRegex(crash.Blocked,'oversized response'):
+            crash.execute(pathlib.Path(sys.executable),
+                          ['-c', "import sys;sys.stdout.write('X'*131073)"])
+
     def test_full_cli_argv_has_no_shell(self):
         src=TARGET.read_text(encoding='utf-8')
         self.assertIn('subprocess.Popen([str(binary), "blob", "put", "--json",',src)
