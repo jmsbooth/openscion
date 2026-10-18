@@ -22,12 +22,14 @@ struct Fixture {
     now: Option<u64>,
     subject: String,
     audience: String,
+    evidence_bytes: Vec<u8>,
 }
 impl Fixture {
     fn new() -> Self {
         let signer = SigningKey::from_bytes(&[7u8; 32]);
         let policy_digest = sha256(b"FOSS-478-test-policy");
-        let evidence_digest = sha256(b"FOSS-478-test-evidence-bundle");
+        let evidence_bytes = b"FOSS-478-test-evidence-bundle".to_vec();
+        let evidence_digest = sha256(&evidence_bytes);
         let candidate = format!("r1_{}", "a".repeat(64));
         let request = PromotionRequest {
             channel: "main".into(),
@@ -84,6 +86,7 @@ impl Fixture {
             revocation: RevocationState { epoch: 11, fresh_until: NOW + 600 },
             nonces: BTreeSet::new(), now: Some(NOW), subject: SUBJECT.into(),
             audience: AUDIENCE.into(),
+            evidence_bytes,
         }
     }
     fn resign(&mut self) {
@@ -98,6 +101,7 @@ impl Fixture {
             issuers: &self.issuers,
             revocation: Some(&self.revocation),
             used_nonces: &self.nonces,
+            evidence_bundle: &self.evidence_bytes,
         }
     }
     fn verify(&self) -> Result<VerifiedApproval, VerifyError> {
@@ -355,4 +359,38 @@ fn replay_after_revocation_is_not_a_new_promotion() {
     let mut f = Fixture::new();
     f.issuers[0].revoked = true;
     f.reject(VerifyError::KeyRevoked);
+}
+
+#[test]
+fn rejects_missing_evidence_bundle_even_when_signed_hash_matches() {
+    let mut f = Fixture::new();
+    f.evidence_bytes.clear();
+    f.reject(VerifyError::EvidenceMissing);
+}
+
+#[test]
+fn rejects_modified_evidence_bundle_bytes_with_valid_signature() {
+    let mut f = Fixture::new();
+    f.evidence_bytes[0] ^= 1;
+    f.reject(VerifyError::EvidenceHashMismatch);
+}
+
+#[test]
+fn rejects_oversized_evidence_bundle_before_hashing_or_allocating_more() {
+    let mut f = Fixture::new();
+    f.evidence_bytes = vec![0xa5; MAX_EVIDENCE_BYTES + 1];
+    f.reject(VerifyError::EvidenceMissing);
+}
+
+#[test]
+fn rejects_ambiguous_channel_and_identity_tokens() {
+    let mut f = Fixture::new();
+    f.request.channel = "Main".into();
+    f.reject(VerifyError::InvalidRequest);
+    let mut f = Fixture::new();
+    f.request.channel = "..".into();
+    f.reject(VerifyError::InvalidRequest);
+    let mut f = Fixture::new();
+    f.request.policy_id = "policy.".into();
+    f.reject(VerifyError::InvalidRequest);
 }
