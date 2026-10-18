@@ -183,28 +183,49 @@ pub struct VerifiedApproval {
     revocation_epoch: u64,
 }
 impl VerifiedApproval {
-    pub fn fingerprint(&self) -> [u8; 32] { self.fingerprint }
-    pub fn issuer_key_id(&self) -> &str { &self.issuer_key_id }
-    pub fn issuer_key_version(&self) -> u64 { self.issuer_key_version }
-    pub fn nonce(&self) -> [u8; 32] { self.nonce }
-    pub fn policy_epoch(&self) -> u64 { self.policy_epoch }
-    pub fn key_epoch(&self) -> u64 { self.key_epoch }
-    pub fn revocation_epoch(&self) -> u64 { self.revocation_epoch }
+    pub fn fingerprint(&self) -> [u8; 32] {
+        self.fingerprint
+    }
+    pub fn issuer_key_id(&self) -> &str {
+        &self.issuer_key_id
+    }
+    pub fn issuer_key_version(&self) -> u64 {
+        self.issuer_key_version
+    }
+    pub fn nonce(&self) -> [u8; 32] {
+        self.nonce
+    }
+    pub fn policy_epoch(&self) -> u64 {
+        self.policy_epoch
+    }
+    pub fn key_epoch(&self) -> u64 {
+        self.key_epoch
+    }
+    pub fn revocation_epoch(&self) -> u64 {
+        self.revocation_epoch
+    }
 }
 
 fn valid_token(value: &str, min: usize, max: usize) -> bool {
     let bytes = value.as_bytes();
     (min..=max).contains(&bytes.len())
-        && bytes.first().is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
-        && bytes.last().is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && bytes
+            .first()
+            .is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && bytes
+            .last()
+            .is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
         && !value.contains("..")
-        && bytes.iter().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()
-            || matches!(b, b'-' | b'_' | b'.'))
+        && bytes.iter().all(|b| {
+            b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'-' | b'_' | b'.')
+        })
 }
 fn valid_revision(id: &str) -> bool {
     id.len() == 67
         && id.starts_with("r1_")
-        && id.as_bytes()[3..].iter().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(b))
+        && id.as_bytes()[3..]
+            .iter()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(b))
 }
 fn framed(domain: &[u8], payload: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(domain.len() + 8 + payload.len());
@@ -225,7 +246,9 @@ fn write_opt_revision(out: &mut Vec<u8>, value: Option<&str>) {
         out.push(0);
     }
 }
-pub fn sha256(bytes: &[u8]) -> [u8; 32] { Sha256::digest(bytes).into() }
+pub fn sha256(bytes: &[u8]) -> [u8; 32] {
+    Sha256::digest(bytes).into()
+}
 
 impl PromotionRequest {
     pub fn fingerprint(&self, authenticated_subject: &str) -> Result<[u8; 32], VerifyError> {
@@ -234,7 +257,10 @@ impl PromotionRequest {
             || !valid_token(&self.idempotency_key, 16, 128)
             || !valid_token(authenticated_subject, 1, 128)
             || !valid_revision(&self.candidate)
-            || self.expected_head.as_deref().is_some_and(|id| !valid_revision(id))
+            || self
+                .expected_head
+                .as_deref()
+                .is_some_and(|id| !valid_revision(id))
             || self.policy_epoch == 0
         {
             return Err(VerifyError::InvalidRequest);
@@ -288,14 +314,24 @@ struct Decoder<'a> {
     pos: usize,
 }
 impl<'a> Decoder<'a> {
-    fn new(bytes: &'a [u8]) -> Self { Self { bytes, pos: 0 } }
+    fn new(bytes: &'a [u8]) -> Self {
+        Self { bytes, pos: 0 }
+    }
     fn take(&mut self, size: usize) -> Result<&'a [u8], VerifyError> {
-        let end = self.pos.checked_add(size).ok_or(VerifyError::MalformedWire)?;
-        let data = self.bytes.get(self.pos..end).ok_or(VerifyError::MalformedWire)?;
+        let end = self
+            .pos
+            .checked_add(size)
+            .ok_or(VerifyError::MalformedWire)?;
+        let data = self
+            .bytes
+            .get(self.pos..end)
+            .ok_or(VerifyError::MalformedWire)?;
         self.pos = end;
         Ok(data)
     }
-    fn byte(&mut self) -> Result<u8, VerifyError> { Ok(self.take(1)?[0]) }
+    fn byte(&mut self) -> Result<u8, VerifyError> {
+        Ok(self.take(1)?[0])
+    }
     fn u32(&mut self) -> Result<u32, VerifyError> {
         Ok(u32::from_be_bytes(self.array()?))
     }
@@ -303,14 +339,19 @@ impl<'a> Decoder<'a> {
         Ok(u64::from_be_bytes(self.array()?))
     }
     fn array<const N: usize>(&mut self) -> Result<[u8; N], VerifyError> {
-        self.take(N)?.try_into().map_err(|_| VerifyError::MalformedWire)
+        self.take(N)?
+            .try_into()
+            .map_err(|_| VerifyError::MalformedWire)
     }
     fn string(&mut self, max: usize) -> Result<String, VerifyError> {
         let count = self.u32()? as usize;
-        if count == 0 || count > max { return Err(VerifyError::MalformedWire); }
-        let s = std::str::from_utf8(self.take(count)?)
-            .map_err(|_| VerifyError::MalformedWire)?;
-        if !valid_token(s, 1, max) { return Err(VerifyError::MalformedWire); }
+        if count == 0 || count > max {
+            return Err(VerifyError::MalformedWire);
+        }
+        let s = std::str::from_utf8(self.take(count)?).map_err(|_| VerifyError::MalformedWire)?;
+        if !valid_token(s, 1, max) {
+            return Err(VerifyError::MalformedWire);
+        }
         Ok(s.to_owned())
     }
     fn optional_revision(&mut self) -> Result<Option<String>, VerifyError> {
@@ -318,13 +359,17 @@ impl<'a> Decoder<'a> {
             0 => Ok(None),
             1 => {
                 let s = self.string(67)?;
-                if !valid_revision(&s) { return Err(VerifyError::MalformedWire); }
+                if !valid_revision(&s) {
+                    return Err(VerifyError::MalformedWire);
+                }
                 Ok(Some(s))
             }
             _ => Err(VerifyError::MalformedWire),
         }
     }
-    fn end(&self) -> bool { self.pos == self.bytes.len() }
+    fn end(&self) -> bool {
+        self.pos == self.bytes.len()
+    }
 }
 
 impl AuthorizationStatement {
@@ -332,7 +377,8 @@ impl AuthorizationStatement {
     /// unrecognized versions/domains and trailing extra fields fail closed.
     /// A raw signed JSON boolean can never be interpreted as authorization.
     pub fn decode_canonical(wire: &[u8]) -> Result<Self, VerifyError> {
-        if wire.len() > MAX_AUTH_BYTES || wire.len() < AUTH_DOMAIN.len() + 8
+        if wire.len() > MAX_AUTH_BYTES
+            || wire.len() < AUTH_DOMAIN.len() + 8
             || !wire.starts_with(AUTH_DOMAIN)
         {
             return Err(VerifyError::MalformedWire);
@@ -345,7 +391,9 @@ impl AuthorizationStatement {
             return Err(VerifyError::NonCanonical);
         }
         let body = container.take(size as usize)?;
-        if !container.end() { return Err(VerifyError::NonCanonical); }
+        if !container.end() {
+            return Err(VerifyError::NonCanonical);
+        }
         let mut d = Decoder::new(body);
         let audience = d.string(128)?;
         let issuer_key_id = d.string(128)?;
@@ -355,7 +403,9 @@ impl AuthorizationStatement {
         let channel = d.string(128)?;
         let expected_head = d.optional_revision()?;
         let candidate = d.string(67)?;
-        if !valid_revision(&candidate) { return Err(VerifyError::MalformedWire); }
+        if !valid_revision(&candidate) {
+            return Err(VerifyError::MalformedWire);
+        }
         let policy_id = d.string(128)?;
         let policy_digest = d.array()?;
         let policy_epoch = d.u64()?;
@@ -371,7 +421,9 @@ impl AuthorizationStatement {
         let nonce = d.array()?;
         let issued_at = d.u64()?;
         let expires_at = d.u64()?;
-        if !d.end() { return Err(VerifyError::NonCanonical); }
+        if !d.end() {
+            return Err(VerifyError::NonCanonical);
+        }
         let decoded = Self {
             audience,
             issuer_key_id,
@@ -420,14 +472,16 @@ pub fn verify_new_authorization(
     if auth.algorithm != ALG_ED25519 {
         return Err(VerifyError::WrongAlgorithm);
     }
-    let issuer = trust.issuers.iter()
-        .find(|key| key.key_id == auth.issuer_key_id
-            && key.key_version == auth.issuer_key_version)
+    let issuer = trust
+        .issuers
+        .iter()
+        .find(|key| key.key_id == auth.issuer_key_id && key.key_version == auth.issuer_key_version)
         .ok_or(VerifyError::UntrustedIssuer)?;
-    let verifying_key = VerifyingKey::from_bytes(&issuer.public_key)
-        .map_err(|_| VerifyError::UntrustedIssuer)?;
+    let verifying_key =
+        VerifyingKey::from_bytes(&issuer.public_key).map_err(|_| VerifyError::UntrustedIssuer)?;
     let signature = Signature::from_bytes(&signed.signature);
-    verifying_key.verify_strict(&signed.statement_bytes, &signature)
+    verifying_key
+        .verify_strict(&signed.statement_bytes, &signature)
         .map_err(|_| VerifyError::InvalidSignature)?;
 
     // Check every signed approval field against the server-derived request
@@ -463,7 +517,9 @@ pub fn verify_new_authorization(
     {
         return Err(VerifyError::PolicyStale);
     }
-    if auth.decision != DECISION_ALLOW { return Err(VerifyError::DecisionDenied); }
+    if auth.decision != DECISION_ALLOW {
+        return Err(VerifyError::DecisionDenied);
+    }
     if auth.role != Role::Reviewer || issuer.role != Role::Reviewer {
         return Err(VerifyError::RoleDenied);
     }
@@ -478,8 +534,10 @@ pub fn verify_new_authorization(
     if revocation.fresh_until < now {
         return Err(VerifyError::RevocationUnknown);
     }
-    if auth.key_epoch == 0 || issuer.key_epoch == 0
-        || auth.issuer_key_version == 0 || revocation.epoch == 0
+    if auth.key_epoch == 0
+        || issuer.key_epoch == 0
+        || auth.issuer_key_version == 0
+        || revocation.epoch == 0
         || auth.key_epoch != issuer.key_epoch
         || auth.revocation_epoch != revocation.epoch
     {
@@ -488,7 +546,9 @@ pub fn verify_new_authorization(
     if issuer.revoked || now < issuer.active_from || now > issuer.active_until {
         return Err(VerifyError::KeyRevoked);
     }
-    if auth.issued_at > now { return Err(VerifyError::NotYetValid); }
+    if auth.issued_at > now {
+        return Err(VerifyError::NotYetValid);
+    }
     if auth.expires_at < now
         || auth.expires_at <= auth.issued_at
         || auth.expires_at - auth.issued_at > MAX_AUTH_TTL_SECONDS
