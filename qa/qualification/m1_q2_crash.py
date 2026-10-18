@@ -49,7 +49,7 @@ def require_windows_ntfs(path: Path) -> None:
             "NOT_RUN: requires actual native Windows, not WSL/Wine")
     # Import only on native Windows. Remote and UNC volumes must not qualify.
     import ctypes
-    require(bool(path.drive) and not path.drive.startswith("\\"),
+    require(bool(path.drive) and not path.drive.startswith("\\\\"),
             "NOT_RUN: evidence must use a local drive letter")
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.GetDriveTypeW.argtypes = [ctypes.c_wchar_p]
