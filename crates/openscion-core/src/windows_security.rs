@@ -391,10 +391,7 @@ pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
         let sid_header = unsafe { std::slice::from_raw_parts(bytes.add(8), 8) };
         let sub_authorities = sid_header[1] as usize;
         let sid_length = 8 + 4 * sub_authorities;
-        if sid_header[0] != 1
-            || sub_authorities > 15
-            || 8 + sid_length > header.size as usize
-        {
+        if sid_header[0] != 1 || sub_authorities > 15 || 8 + sid_length > header.size as usize {
             return Err(invalid_acl());
         }
         let sid = unsafe { bytes.add(8) }.cast::<c_void>();
