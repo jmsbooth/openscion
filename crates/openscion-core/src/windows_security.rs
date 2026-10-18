@@ -28,7 +28,8 @@ const SE_DACL_PRESENT: u16 = 0x0004;
 const SE_DACL_PROTECTED: u16 = 0x1000;
 const ACL_SIZE_INFORMATION_CLASS: u32 = 2;
 const ACCESS_ALLOWED_ACE_TYPE: u8 = 0;
-const INHERITED_ACE: u8 = 0x10;
+const OBJECT_INHERIT_ACE: u8 = 0x01;
+const CONTAINER_INHERIT_ACE: u8 = 0x02;
 const SDDL_REVISION_1: u32 = 1;
 
 #[repr(C)]
@@ -305,6 +306,21 @@ pub(crate) fn create_private_file(path: &Path) -> io::Result<File> {
 /// Security descriptor inspection is path-based and therefore cannot defeat
 /// adversarial same-identity rename races; M1 retains that explicit boundary.
 pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
+    use std::os::windows::fs::MetadataExt;
+    // The expected explicit flags depend on the object type. Reject
+    // reparse points and unexpected ACE flags such as INHERIT_ONLY, which
+    // could otherwise pass a mask-only comparison without granting access.
+    let entry = std::fs::symlink_metadata(path)?;
+    if entry.file_attributes() & 0x400 != 0 {
+        return Err(invalid_acl());
+    }
+    let expected_flags = if entry.is_dir() {
+        OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE
+    } else if entry.is_file() {
+        0
+    } else {
+        return Err(invalid_acl());
+    };
     let path = path_wide(path)?;
     let mut owner: *mut c_void = null_mut();
     let mut acl: *mut c_void = null_mut();
@@ -373,7 +389,7 @@ pub(crate) fn verify_private_acl(path: &Path) -> io::Result<()> {
         // SAFETY: GetAce returns at least the ACE header within this ACL.
         let header = unsafe { ptr::read_unaligned(ace.cast::<AceHeader>()) };
         if header.kind != ACCESS_ALLOWED_ACE_TYPE
-            || header.flags & INHERITED_ACE != 0
+            || header.flags != expected_flags
             || header.size < 16
         {
             return Err(invalid_acl());
