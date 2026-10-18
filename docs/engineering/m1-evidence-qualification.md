@@ -36,7 +36,7 @@ Use PowerShell 7.4+, native Rust 1.85.1 and a disposable NTFS fixture, following
     $packet = Join-Path $env:TEMP 'openscion-native-m1-evidence'
     New-Item -ItemType Directory -Force -Path $packet | Out-Null
     $raw = Join-Path $env:TEMP 'openscion-native-m1-raw'
-    python qa/qualification/evidence.py capture --repo . --source-sha $sha --output (Join-Path $packet 'windows-ntfs') --case windows-ntfs --timeout 1200 --artifacts $raw -- pwsh -NoProfile -File qa/windows/M1-Qualification.ps1 -Binary (Resolve-Path '.\target\debug\openscion.exe').Path -ArtifactDir $raw -Contenders 20
+    python qa/qualification/evidence.py capture --repo . --source-sha $sha --output (Join-Path $packet 'windows-ntfs') --case windows-ntfs --timeout 1200 --artifacts $raw -- pwsh -NoProfile -File qa/windows/M1-Qualification.ps1 -Binary (Resolve-Path '.\target\debug\openscion.exe').Path -SourceRoot (Resolve-Path .).Path -ExpectedHead $sha -ArtifactDir $raw -Contenders 20
     python qa/qualification/evidence.py verify --packet $packet --source-sha $sha --require windows-ntfs:Windows
 
 The Windows command has not been executed during this increment. Its completion alone cannot satisfy FOSS-484: separate native crash/restart testing and independent security review are mandatory. An OS name in JSON is not an attestation. Re-run and inspect on the exact head of each qualified PR, including after merges.
