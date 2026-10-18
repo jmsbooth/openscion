@@ -9,7 +9,8 @@ independent security reviewer are required before merge approval.
 param(
     [Parameter(Mandatory)][string]$Binary,
     [Parameter(Mandatory)][string]$SourceRoot,
-    [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{40} (Join-Path ([IO.Path]::GetTempPath()) ("openscion-native-qa-" + [guid]::NewGuid().ToString("N"))),
+    [Parameter(Mandatory)][ValidatePattern('^[0-9a-f]{40}$')][string]$ExpectedHead,
+    [string]$ArtifactDir = (Join-Path ([IO.Path]::GetTempPath()) ("openscion-native-qa-" + [guid]::NewGuid().ToString("N"))),
     [ValidateRange(2,32)][int]$Contenders = 20
 )
 Set-StrictMode -Version Latest
