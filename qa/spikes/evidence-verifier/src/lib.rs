@@ -12,6 +12,7 @@ use std::collections::BTreeSet;
 pub const REQUEST_DOMAIN: &[u8] = b"openscion.promotion.request.v1\0";
 pub const AUTH_DOMAIN: &[u8] = b"openscion.promotion.authorization.v1\0";
 pub const MAX_AUTH_BYTES: usize = 4096;
+pub const MAX_EVIDENCE_BYTES: usize = 1024 * 1024;
 pub const MAX_AUTH_TTL_SECONDS: u64 = 900;
 pub const ALG_ED25519: u8 = 1;
 pub const DECISION_ALLOW: u8 = 1;
@@ -115,6 +116,8 @@ pub struct TrustView<'a> {
     pub revocation: Option<&'a RevocationState>,
     /// Read-only authoritative replay projection, checked again in DB txn.
     pub used_nonces: &'a BTreeSet<NonceKey>,
+    /// Actual bounded evidence bundle bytes; never accept digest-only proof.
+    pub evidence_bundle: &'a [u8],
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -126,6 +129,8 @@ pub enum VerifyError {
     UntrustedIssuer,
     InvalidSignature,
     ScopeMismatch,
+    EvidenceMissing,
+    EvidenceHashMismatch,
     PolicyStale,
     EpochStale,
     DecisionDenied,
@@ -148,6 +153,8 @@ impl VerifyError {
             Self::UntrustedIssuer => "E_UNTRUSTED_ISSUER",
             Self::InvalidSignature => "E_SIGNATURE",
             Self::ScopeMismatch => "E_SCOPE",
+            Self::EvidenceMissing => "E_EVIDENCE_MISSING",
+            Self::EvidenceHashMismatch => "E_EVIDENCE_HASH",
             Self::PolicyStale => "E_POLICY_STALE",
             Self::EpochStale => "E_EPOCH_STALE",
             Self::DecisionDenied => "E_DECISION_DENIED",
@@ -186,8 +193,13 @@ impl VerifiedApproval {
 }
 
 fn valid_token(value: &str, min: usize, max: usize) -> bool {
-    (min..=max).contains(&value.len())
-        && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+    let bytes = value.as_bytes();
+    (min..=max).contains(&bytes.len())
+        && bytes.first().is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && bytes.last().is_some_and(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && !value.contains("..")
+        && bytes.iter().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()
+            || matches!(b, b'-' | b'_' | b'.'))
 }
 fn valid_revision(id: &str) -> bool {
     id.len() == 67
@@ -433,6 +445,16 @@ pub fn verify_new_authorization(
     {
         return Err(VerifyError::ScopeMismatch);
     }
+    // The presence of a signed digest alone does not prove that the
+    // referenced evidence exists or was transferred without corruption.
+    // Hash the independently supplied bounded bytes before any acceptance.
+    if trust.evidence_bundle.is_empty() || trust.evidence_bundle.len() > MAX_EVIDENCE_BYTES {
+        return Err(VerifyError::EvidenceMissing);
+    }
+    if sha256(trust.evidence_bundle) != request.evidence_digest {
+        return Err(VerifyError::EvidenceHashMismatch);
+    }
+
     if !valid_token(trust.audience, 1, 128)
         || request.channel != trust.policy.channel
         || request.policy_id != trust.policy.policy_id
@@ -456,7 +478,9 @@ pub fn verify_new_authorization(
     if revocation.fresh_until < now {
         return Err(VerifyError::RevocationUnknown);
     }
-    if auth.key_epoch != issuer.key_epoch
+    if auth.key_epoch == 0 || issuer.key_epoch == 0
+        || auth.issuer_key_version == 0 || revocation.epoch == 0
+        || auth.key_epoch != issuer.key_epoch
         || auth.revocation_epoch != revocation.epoch
     {
         return Err(VerifyError::EpochStale);
