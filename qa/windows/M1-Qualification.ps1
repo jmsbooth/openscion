@@ -84,6 +84,7 @@ function Save-ACL {
     param([string]$Path,[string]$Name)
     Get-Acl -LiteralPath $Path | Format-List * | Out-File -LiteralPath (Join-Path $Artifacts ($Name+'.acl.txt'))
     & icacls.exe $Path 1> (Join-Path $Artifacts ($Name+'.icacls.stdout')) 2> (Join-Path $Artifacts ($Name+'.icacls.stderr'))
+    if ($LASTEXITCODE -ne 0) { throw "Native ACL evidence inspection failed: $Name (icacls exit=$LASTEXITCODE)" }
 }
 function Assert-PrivateDACL {
     param([string]$Name, [string]$Path)
