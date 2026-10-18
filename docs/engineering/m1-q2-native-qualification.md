@@ -48,3 +48,30 @@ Run the operator tooling's Linux negative-contract tests with:
     python3 -m py_compile qa/qualification/m1_q2_native.py
 
 These tests verify preflight fail-closed behavior only; they are not native Windows qualification.
+
+
+## M1-Q2B — Windows observational process-kill/restart experiment (FOSS-490)
+
+The optional Windows-only crash observation harness \`qa/qualification/m1_q2_crash.py\` performs repeated **fresh process** blob writes, terminates some writers at multiple delays, retries each unique 1 MiB blob in a new process, and re-verifies the resulting typed object ID and byte length. By default it runs 64 attempts. It uses no GitHub Actions and leaves raw attempt streams and \`summary.json\` for review.
+
+This experiment is not deterministic injection at the precise write/fsync/publish boundaries. A killed process may not have entered a storage syscall. Therefore even an exit-zero run **DOES NOT satisfy** all Windows fault-boundary or power-loss requirements of FOSS-484; it is supplementary recovery evidence.
+
+Use a trusted checkout of \`main\` for the helper scripts and a *separate*, clean checked-out PR #3 or PR #4 revision for the Rust binary. Build the native Windows executable using the M1-Q2 driver first. From PowerShell:
+
+    $trusted = 'C:\source\openscion-main\qa\qualification'
+    $repo = 'C:\source\openscion-pr3'
+    $sha = (git -C $repo rev-parse HEAD).Trim()
+    $binary = Join-Path $repo 'target\debug\openscion.exe'
+    $parent = 'C:\m1-evidence'
+    $packet = Join-Path $parent 'pr3-interruption-packet'
+    $raw = Join-Path $parent 'pr3-interruption-raw'
+    $fixture = Join-Path $parent 'pr3-interruption-fixture'
+    python (Join-Path $trusted 'evidence.py') capture --repo $repo --source-sha $sha --case windows-interruption --output $packet --artifacts $raw --timeout 1200 -- python (Join-Path $trusted 'm1_q2_crash.py') --repo $repo --binary $binary --expected-sha $sha --artifacts $raw --fixture $fixture --attempts 64
+
+The parent directory must exist on a local fixed NTFS volume. Packet, raw and fixture paths must be nonexistent and outside the PR checkout; no reparse/junction ancestors. Repeat separately for PR #4 and on the final integration SHA. The evidence utility writes the SHA-256 manifest and refuses unexpected exit. A real independent reviewer must inspect the raw observations, executable-build provenance, NTFS ACL and junction cases, exact publication-boundary injections (separate work), and remaining unsupported failure modes.
+
+Linux preflight and fake-CLI integration tests:
+
+    python3 -m unittest discover -s qa/qualification -p 'test_m1_q2_crash.py' -v
+
+Those tests prove helper mechanics, not native NTFS correctness, Windows crash safety or release authorization.
