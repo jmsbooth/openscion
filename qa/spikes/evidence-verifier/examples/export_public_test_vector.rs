@@ -58,7 +58,7 @@ fn main() {
     let signature = signer.sign(&wire).to_bytes();
     println!(
         concat!(
-            "{\n",
+            "{{\n",
             "  \"format\": \"openscion.foss478.public-test-vector.v1\",\n",
             "  \"subject\": \"{}\",\n",
             "  \"channel\": \"{}\",\n",
