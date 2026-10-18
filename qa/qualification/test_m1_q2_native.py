@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -92,6 +93,21 @@ class M1Q2Contract(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "dirty checkout"):
                         gate.run(ns)
             self.assertFalse(output.exists())
+
+    def test_native_smoke_requires_expected_semantic_code(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            packet = Path(tmp)
+            case = packet / "cli-before-init"
+            case.mkdir()
+            stdout = case / "stdout.bin"
+            stdout.write_text(json.dumps({"ok": False, "code": "E_NOT_INITIALIZED"}))
+            gate.verify_smoke_response(packet, "cli-before-init")
+            stdout.write_text(json.dumps({"ok": False, "code": "E_USAGE"}))
+            with self.assertRaisesRegex(RuntimeError, "incorrect failure details"):
+                gate.verify_smoke_response(packet, "cli-before-init")
+            stdout.write_text("not-json")
+            with self.assertRaisesRegex(RuntimeError, "invalid native CLI JSON"):
+                gate.verify_smoke_response(packet, "cli-before-init")
 
     def test_no_release_approval_string_in_success(self):
         source = TARGET.read_text(encoding="utf-8")
