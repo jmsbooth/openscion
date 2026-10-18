@@ -11,5 +11,8 @@ repository.workspace = true
 name = "openscion"
 path = "src/main.rs"
 
+[features]
+qa-fault-injection = ["openscion-core/qa-fault-injection"]
+
 [dependencies]
 openscion-core = { path = "../openscion-core" }
