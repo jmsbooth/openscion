@@ -448,7 +448,10 @@ fn distinct_version_during_key_rotation_does_not_override_pinned_key() {
     old_key.key_version = 1;
     old_key.public_key = [0u8; 32];
     f.issuers.push(old_key);
-    assert!(f.verify().is_ok(), "the exact signed key version must be used");
+    assert!(
+        f.verify().is_ok(),
+        "the exact signed key version must be used"
+    );
 }
 
 #[test]
