@@ -52,11 +52,11 @@ These tests verify preflight fail-closed behavior only; they are not native Wind
 
 ## M1-Q2B — Windows observational process-kill/restart experiment (FOSS-490)
 
-The optional Windows-only crash observation harness \`qa/qualification/m1_q2_crash.py\` performs repeated **fresh process** blob writes, terminates some writers at multiple delays, retries each unique 1 MiB blob in a new process, and re-verifies the resulting typed object ID and byte length. By default it runs 64 attempts. It uses no GitHub Actions and leaves raw attempt streams and \`summary.json\` for review.
+The optional Windows-only crash observation harness `qa/qualification/m1_q2_crash.py` performs repeated **fresh process** blob writes, terminates some writers at multiple delays, retries each unique 1 MiB blob in a new process, and re-verifies the resulting typed object ID and byte length. By default it runs 64 attempts. It uses no GitHub Actions and leaves raw attempt streams and `summary.json` for review.
 
 This experiment is not deterministic injection at the precise write/fsync/publish boundaries. A killed process may not have entered a storage syscall. Therefore even an exit-zero run **DOES NOT satisfy** all Windows fault-boundary or power-loss requirements of FOSS-484; it is supplementary recovery evidence.
 
-Use a trusted checkout of \`main\` for the helper scripts and a *separate*, clean checked-out PR #3 or PR #4 revision for the Rust binary. Build the native Windows executable using the M1-Q2 driver first. From PowerShell:
+Use a trusted checkout of `main` for the helper scripts and a *separate*, clean checked-out PR #3 or PR #4 revision for the Rust binary. Build the native Windows executable using the M1-Q2 driver first. From PowerShell:
 
     $trusted = 'C:\source\openscion-main\qa\qualification'
     $repo = 'C:\source\openscion-pr3'
