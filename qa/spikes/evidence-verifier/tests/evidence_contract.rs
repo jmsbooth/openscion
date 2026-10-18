@@ -135,6 +135,10 @@ fn valid_independent_signed_review_is_verified() {
     assert_eq!(result.fingerprint(), f.statement.request_fingerprint);
     assert_eq!(result.issuer_key_id(), ISSUER_ID);
     assert_eq!(result.issuer_key_version(), 2);
+    assert_eq!(result.issuer_principal(), "reviewer-a");
+    assert_eq!(result.authenticated_subject(), SUBJECT);
+    assert_eq!(result.audience(), AUDIENCE);
+    assert_eq!(result.evidence_bundle_digest(), f.request.evidence_digest);
     assert_eq!(result.nonce(), [9u8; 32]);
     assert_eq!(result.policy_epoch(), 3);
     assert_eq!(result.key_epoch(), 7);
@@ -420,4 +424,29 @@ fn rejects_ambiguous_channel_and_identity_tokens() {
     let mut f = Fixture::new();
     f.request.policy_id = "policy.".into();
     f.reject(VerifyError::InvalidRequest);
+}
+
+#[test]
+fn rejects_ambiguous_duplicate_issuer_id_and_version() {
+    let mut f = Fixture::new();
+    f.issuers.push(f.issuers[0].clone());
+    f.reject(VerifyError::UntrustedIssuer);
+}
+
+#[test]
+fn rejects_zero_nonce_even_if_issuer_signed_it() {
+    let mut f = Fixture::new();
+    f.statement.nonce = [0; 32];
+    f.resign();
+    f.reject(VerifyError::MalformedWire);
+}
+
+#[test]
+fn distinct_version_during_key_rotation_does_not_override_pinned_key() {
+    let mut f = Fixture::new();
+    let mut old_key = f.issuers[0].clone();
+    old_key.key_version = 1;
+    old_key.public_key = [0u8; 32];
+    f.issuers.push(old_key);
+    assert!(f.verify().is_ok(), "the exact signed key version must be used");
 }
