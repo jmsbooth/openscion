@@ -170,6 +170,12 @@ function Invoke-Racing {
             if (-not $p.WaitForExit($remaining)) {
                 throw "Concurrent process exceeded 30-second global deadline (PID=$($p.Id))"
             }
+            # Child descendants may hold redirected handles after the process exits.
+            # Bound stream completion to the same global deadline.
+            $remaining = [int][Math]::Max(0, [Math]::Ceiling(30000 - $deadline.Elapsed.TotalMilliseconds))
+            if (-not $entry.StdoutTask.Wait($remaining)) { throw 'Concurrent stdout did not close before deadline' }
+            $remaining = [int][Math]::Max(0, [Math]::Ceiling(30000 - $deadline.Elapsed.TotalMilliseconds))
+            if (-not $entry.StderrTask.Wait($remaining)) { throw 'Concurrent stderr did not close before deadline' }
             $stdout = $entry.StdoutTask.GetAwaiter().GetResult()
             $stderr = $entry.StderrTask.GetAwaiter().GetResult()
             if ($stdout.Length -gt 1048576 -or $stderr.Length -gt 1048576) {
