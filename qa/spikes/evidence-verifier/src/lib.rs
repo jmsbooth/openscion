@@ -177,6 +177,10 @@ pub struct VerifiedApproval {
     fingerprint: [u8; 32],
     issuer_key_id: String,
     issuer_key_version: u64,
+    issuer_principal: String,
+    authenticated_subject: String,
+    audience: String,
+    evidence_bundle_digest: [u8; 32],
     nonce: [u8; 32],
     policy_epoch: u64,
     key_epoch: u64,
@@ -191,6 +195,18 @@ impl VerifiedApproval {
     }
     pub fn issuer_key_version(&self) -> u64 {
         self.issuer_key_version
+    }
+    pub fn issuer_principal(&self) -> &str {
+        &self.issuer_principal
+    }
+    pub fn authenticated_subject(&self) -> &str {
+        &self.authenticated_subject
+    }
+    pub fn audience(&self) -> &str {
+        &self.audience
+    }
+    pub fn evidence_bundle_digest(&self) -> [u8; 32] {
+        self.evidence_bundle_digest
     }
     pub fn nonce(&self) -> [u8; 32] {
         self.nonce
@@ -472,11 +488,14 @@ pub fn verify_new_authorization(
     if auth.algorithm != ALG_ED25519 {
         return Err(VerifyError::WrongAlgorithm);
     }
-    let issuer = trust
-        .issuers
-        .iter()
-        .find(|key| key.key_id == auth.issuer_key_id && key.key_version == auth.issuer_key_version)
-        .ok_or(VerifyError::UntrustedIssuer)?;
+    // An ambiguous ID+key-version mapping during rotation must fail closed.
+    let mut candidate_keys = trust.issuers.iter().filter(|key| {
+        key.key_id == auth.issuer_key_id && key.key_version == auth.issuer_key_version
+    });
+    let issuer = candidate_keys.next().ok_or(VerifyError::UntrustedIssuer)?;
+    if candidate_keys.next().is_some() {
+        return Err(VerifyError::UntrustedIssuer);
+    }
     let verifying_key =
         VerifyingKey::from_bytes(&issuer.public_key).map_err(|_| VerifyError::UntrustedIssuer)?;
     let signature = Signature::from_bytes(&signed.signature);
@@ -557,6 +576,10 @@ pub fn verify_new_authorization(
     }
     // Nonce collision screening is read-only. Authority transaction must
     // recheck against authoritative used_nonces immediately before commit.
+    // All-zero "nonce" is never valid fresh authorization evidence.
+    if auth.nonce == [0u8; 32] {
+        return Err(VerifyError::MalformedWire);
+    }
     if trust.used_nonces.contains(&NonceKey {
         issuer_key_id: issuer.key_id.clone(),
         nonce: auth.nonce,
@@ -567,6 +590,10 @@ pub fn verify_new_authorization(
         fingerprint,
         issuer_key_id: issuer.key_id.clone(),
         issuer_key_version: issuer.key_version,
+        issuer_principal: issuer.principal_id.clone(),
+        authenticated_subject: trust.authenticated_subject.to_owned(),
+        audience: auth.audience,
+        evidence_bundle_digest: auth.evidence_digest,
         nonce: auth.nonce,
         policy_epoch: auth.policy_epoch,
         key_epoch: auth.key_epoch,
