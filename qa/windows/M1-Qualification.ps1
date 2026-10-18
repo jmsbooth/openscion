@@ -58,6 +58,39 @@ function Save-ACL {
     Get-Acl -LiteralPath $Path | Format-List * | Out-File -LiteralPath (Join-Path $Artifacts ($Name+'.acl.txt'))
     & icacls.exe $Path 1> (Join-Path $Artifacts ($Name+'.icacls.stdout')) 2> (Join-Path $Artifacts ($Name+'.icacls.stderr'))
 }
+function Assert-PrivateDACL {
+    param([string]$Name, [string]$Path)
+    $acl = Get-Acl -LiteralPath $Path
+    $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    $user = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+    $expected = @($user, 'S-1-5-18', 'S-1-5-32-544')
+    $isDirectory = (Get-Item -LiteralPath $Path -Force).PSIsContainer
+    $flags = if ($isDirectory) {
+        [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
+            [Security.AccessControl.InheritanceFlags]::ObjectInherit
+    } else { [Security.AccessControl.InheritanceFlags]::None }
+    $rules = @($acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $ok = $acl.AreAccessRulesProtected -and ($owner -eq $user) -and ($rules.Count -eq 3)
+    foreach ($rule in $rules) {
+        $sid = $rule.IdentityReference.Value
+        $ok = $ok -and ($sid -in $expected) -and $seen.Add($sid)
+        $ok = $ok -and (-not $rule.IsInherited)
+        $ok = $ok -and ($rule.AccessControlType -eq [Security.AccessControl.AccessControlType]::Allow)
+        $ok = $ok -and ([int]$rule.FileSystemRights -eq 0x001f01ff)
+        $ok = $ok -and ($rule.InheritanceFlags -eq $flags)
+        $ok = $ok -and ($rule.PropagationFlags -eq [Security.AccessControl.PropagationFlags]::None)
+    }
+    $ok = $ok -and ($seen.Count -eq 3)
+    $script:Results.Add([pscustomobject]@{
+        Name=$Name; Result=$(if($ok){'PASS'}else{'FAIL'})
+        Expected='owner+SYSTEM+Administrators protected, explicit and full-control only'
+        ActualOwner=$owner; Protected=$acl.AreAccessRulesProtected; AceCount=$rules.Count
+    })
+    Write-Host ("{0} {1}: protected={2}, aceCount={3}, owner={4}" -f $(if($ok){'PASS'}else{'FAIL'}), $Name, $acl.AreAccessRulesProtected, $rules.Count, $owner)
+    if (-not $ok) { $script:Failures.Add($Name) }
+}
+
 function Test-DACL {
     param([string]$Name,[string]$Path,[string[]]$Arguments,[int]$ExpectedExit,[string]$ExpectedCode)
     $original = Get-Acl -LiteralPath $Path
@@ -78,6 +111,7 @@ function Test-DACL {
     } finally {
         Set-Acl -LiteralPath $Path -AclObject $original
         Save-ACL $Path ($Name+'-restored')
+        Assert-PrivateDACL ($Name+'-restored') $Path
     }
 }
 function Invoke-Racing {
@@ -106,7 +140,9 @@ try {
     Invoke-Observed 'missing-repository' @('status','--json',$Fixture) 4 'E_NOT_INITIALIZED' | Out-Null
     Invoke-Observed 'initialize' @('init','--json',$Fixture) 0 | Out-Null
     Save-ACL $Meta 'initialized-metadata'
+    Assert-PrivateDACL 'metadata-private-on-create' $Meta
     Save-ACL (Join-Path $Meta 'format') 'initialized-marker'
+    Assert-PrivateDACL 'marker-private-on-create' (Join-Path $Meta 'format')
     Invoke-Observed 'inspect' @('status','--json',$Fixture) 0 | Out-Null
     $put = Invoke-Observed 'blob-put' @('blob','put','--json',$Fixture,'src/main.rs') 0
     $blob = [string](($put.Text | ConvertFrom-Json).id)
@@ -114,6 +150,8 @@ try {
     $digest = $blob.Substring(3)
     $blobPath = Join-Path $Meta ('objects\b1\' + $digest.Substring(0,2) + '\' + $digest)
     Save-ACL $blobPath 'initialized-blob'
+    Assert-PrivateDACL 'blob-private-on-create' $blobPath
+    Assert-PrivateDACL 'cas-kind-private-on-create' (Join-Path $Meta 'objects\\b1')
     Invoke-Observed 'blob-verify' @('blob','verify','--json',$Fixture,$blob) 0 | Out-Null
     $manifest = 'src/main.rs' + [char]9 + $blob + [char]9 + '0' + [char]10
     [IO.File]::WriteAllBytes((Join-Path $Fixture 'manifest.tsv'),[Text.Encoding]::UTF8.GetBytes($manifest))
@@ -135,7 +173,7 @@ try {
         $script:Failures.Add('junction-not-verified')
         Write-Host "NOT_RUN junction validation: $_"
     }
-    # RED security cases: source review found Unix-only permission checks.
+    # Negative security cases: added rights must be rejected without auto-repair.
     Test-DACL 'metadata-everyone-modify' $Meta @('status','--json',$Fixture) 6 'E_INVALID_STORE'
     Test-DACL 'marker-everyone-modify' (Join-Path $Meta 'format') @('status','--json',$Fixture) 6 'E_INVALID_STORE'
     Test-DACL 'blob-everyone-modify' $blobPath @('blob','verify','--json',$Fixture,$blob) 3 'E_UNSAFE_PATH'
