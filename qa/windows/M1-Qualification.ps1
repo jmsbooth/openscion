@@ -1,8 +1,8 @@
 #Requires -Version 7.4
 <#
 Native Windows NTFS, ACL, reparse-point and concurrency qualification.
-Not GitHub CI. Disposable fixture only. Tests are expected to FAIL until
-Windows DACL enforcement is implemented. Native Windows execution and an
+Not GitHub CI. Disposable fixture only. The protected-DACL implementation is
+present but NOT release-qualified until these native checks run. Native Windows execution and an
 independent security reviewer are required before merge approval.
 #>
 [CmdletBinding()]
@@ -158,6 +158,14 @@ try {
     $snapshotResult = Invoke-Observed 'snapshot-put' @('snapshot','put','--json',$Fixture,'manifest.tsv') 0
     $snapshot = [string](($snapshotResult.Text | ConvertFrom-Json).id)
     Invoke-Observed 'snapshot-show' @('snapshot','show','--json',$Fixture,$snapshot) 0 | Out-Null
+    # The canonical path contract must hold on case-insensitive NTFS.
+    $colliding = 'src/main.rs' + [char]9 + $blob + [char]9 + '0' + [char]10 +
+                 'src/Main.rs' + [char]9 + $blob + [char]9 + '0' + [char]10
+    [IO.File]::WriteAllBytes((Join-Path $Fixture 'case-collision.tsv'), [Text.Encoding]::UTF8.GetBytes($colliding))
+    Invoke-Observed 'casefold-collision-denied' @('snapshot','put','--json',$Fixture,'case-collision.tsv') 8 'E_SNAPSHOT_INVALID' | Out-Null
+    $reserved = 'src/CON.txt' + [char]9 + $blob + [char]9 + '0' + [char]10
+    [IO.File]::WriteAllBytes((Join-Path $Fixture 'reserved-name.tsv'), [Text.Encoding]::UTF8.GetBytes($reserved))
+    Invoke-Observed 'reserved-device-name-denied' @('snapshot','put','--json',$Fixture,'reserved-name.tsv') 3 'E_UNSAFE_PATH' | Out-Null
     $Destination = Join-Path $Fixture 'checkout'
     Invoke-Observed 'materialize' @('snapshot','materialize','--json',$Fixture,$snapshot,$Destination) 0 | Out-Null
     $a = (Get-FileHash -Algorithm SHA256 -LiteralPath $Source).Hash
@@ -176,6 +184,8 @@ try {
     # Negative security cases: added rights must be rejected without auto-repair.
     Test-DACL 'metadata-everyone-modify' $Meta @('status','--json',$Fixture) 6 'E_INVALID_STORE'
     Test-DACL 'marker-everyone-modify' (Join-Path $Meta 'format') @('status','--json',$Fixture) 6 'E_INVALID_STORE'
+    Test-DACL 'cas-root-everyone-modify' (Join-Path $Meta 'objects') @('blob','verify','--json',$Fixture,$blob) 3 'E_UNSAFE_PATH'
+    Test-DACL 'cas-shard-everyone-modify' (Split-Path -Parent $blobPath) @('blob','verify','--json',$Fixture,$blob) 3 'E_UNSAFE_PATH'
     Test-DACL 'blob-everyone-modify' $blobPath @('blob','verify','--json',$Fixture,$blob) 3 'E_UNSAFE_PATH'
     $race = Join-Path $Fixture 'race-checkout'
     $outcomes = Invoke-Racing 'checkout-20-contenders' @('snapshot','materialize','--json',$Fixture,$snapshot,$race) $Contenders
