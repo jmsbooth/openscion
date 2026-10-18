@@ -107,6 +107,14 @@ class EvidenceContract(unittest.TestCase):
         path.write_text('{"schema":"a","schema":"b"}', encoding="utf-8")
         self.assertNotEqual(self.verify().returncode, 0)
 
+    def test_malformed_elapsed_ms_metadata_rejected(self) -> None:
+        self.assertEqual(self.capture("bad-elapsed", "print('ok')").returncode, 0)
+        path = self.packet / "bad-elapsed" / "metadata.json"
+        entry = json.loads(path.read_text(encoding="utf-8"))
+        entry["elapsed_ms"] = "not-a-number"
+        path.write_text(json.dumps(entry), encoding="utf-8")
+        self.assertNotEqual(self.verify().returncode, 0)
+
     def test_missing_required_case_or_mismatched_platform_rejected(self) -> None:
         self.assertEqual(self.capture("linux-check", "print('ok')").returncode, 0)
         self.assertNotEqual(self.verify("--require", "missing:Windows").returncode, 0)
