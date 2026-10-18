@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
 from pathlib import Path
 import platform
 import re
@@ -49,11 +50,26 @@ def require_native_ntfs(root: Path) -> None:
         raise RuntimeError("NOT_RUN: NTFS required")
 
 
+def verify_smoke_response(packet: Path, case: str) -> None:
+    """An exit code alone cannot establish the expected native CLI behavior."""
+    try:
+        response = json.loads((packet / case / "stdout.bin").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"{case}: invalid native CLI JSON") from exc
+    if case == "cli-before-init":
+        expected = {"ok": False, "code": "E_NOT_INITIALIZED"}
+        if response != expected:
+            raise RuntimeError("native status-before-init returned incorrect failure details")
+    elif response != {"ok": True, "command": "init" if case == "cli-init" else "status",
+                      "format": "openscion.local-store/1", "state": "unborn"}:
+        raise RuntimeError(f"{case}: unexpected success response")
+
+
 def run(args: argparse.Namespace) -> int:
     if not HEX40.fullmatch(args.expected_sha):
         raise ValueError("expected-sha must be a canonical Git commit SHA")
     repo = Path(args.repo).resolve(strict=True)
-    output = Path(args.output).absolute()
+    output = Path(args.output).resolve(strict=False)
     if not output.parent.is_dir() or output.exists():
         raise ValueError("new packet path under an existing directory is required")
     if output == repo or repo in output.parents:
@@ -103,6 +119,7 @@ def run(args: argparse.Namespace) -> int:
                "--", *command]
         if subprocess.run(cmd, check=False).returncode != 0:
             raise RuntimeError(f"{name} failed; native CLI smoke qualification incomplete")
+        verify_smoke_response(output, name)
         cases.append(name)
     if args.suite in ("cas", "revision"):
         name = "native-ntfs"
