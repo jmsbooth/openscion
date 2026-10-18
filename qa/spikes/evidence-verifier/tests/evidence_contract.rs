@@ -262,9 +262,14 @@ fn rejects_missing_clock_or_signature_expiry() {
     f.now = None;
     f.reject(VerifyError::TimeUnavailable);
     let mut f = Fixture::new();
+    // Keep independent key/revocation freshness valid, isolating SIGNATURE
+    // expiry instead of expecting an expired revocation snapshot to pass.
+    f.revocation.fresh_until = NOW + 1_200;
+    f.issuers[0].active_until = NOW + 1_200;
     f.now = Some(NOW + 901);
     f.reject(VerifyError::Expired);
     let mut f = Fixture::new();
+    f.issuers[0].active_from = NOW - 1_200;
     f.now = Some(NOW - 901);
     f.reject(VerifyError::NotYetValid);
 }
