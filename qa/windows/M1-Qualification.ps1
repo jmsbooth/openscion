@@ -8,7 +8,7 @@ independent security reviewer are required before merge approval.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$Binary,
-    [string]$ArtifactDir = (Join-Path $env:TEMP ("openscion-native-qa-" + [guid]::NewGuid().ToString("N"))),
+    [string]$ArtifactDir = (Join-Path ([IO.Path]::GetTempPath()) ("openscion-native-qa-" + [guid]::NewGuid().ToString("N"))),
     [ValidateRange(2,32)][int]$Contenders = 20
 )
 Set-StrictMode -Version Latest
