@@ -5,6 +5,7 @@
 //! anchors and trusted clock/revocation snapshots can authorize new changes.
 //! Tests are deliberately authored before the verifier implementation.
 
+use ed25519_dalek::{Signature, VerifyingKey};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
@@ -136,7 +137,6 @@ pub enum VerifyError {
     NotYetValid,
     Expired,
     NonceReplay,
-    NotImplemented,
 }
 impl VerifyError {
     pub const fn code(self) -> &'static str {
@@ -159,7 +159,6 @@ impl VerifyError {
             Self::NotYetValid => "E_NOT_YET_VALID",
             Self::Expired => "E_EXPIRED",
             Self::NonceReplay => "E_NONCE_REPLAY",
-            Self::NotImplemented => "E_NOT_IMPLEMENTED",
         }
     }
 }
@@ -270,12 +269,223 @@ impl AuthorizationStatement {
     }
 }
 
-/// Mandatory failure until contract tests are RED and independent verification
-/// is implemented in a separate code review / subsequent commit.
+/// Bounded, strict wire reader. Variable-sized strings have a length prefix,
+/// never trust decoded lengths or accept extra unknown wire fields.
+struct Decoder<'a> {
+    bytes: &'a [u8],
+    pos: usize,
+}
+impl<'a> Decoder<'a> {
+    fn new(bytes: &'a [u8]) -> Self { Self { bytes, pos: 0 } }
+    fn take(&mut self, size: usize) -> Result<&'a [u8], VerifyError> {
+        let end = self.pos.checked_add(size).ok_or(VerifyError::MalformedWire)?;
+        let data = self.bytes.get(self.pos..end).ok_or(VerifyError::MalformedWire)?;
+        self.pos = end;
+        Ok(data)
+    }
+    fn byte(&mut self) -> Result<u8, VerifyError> { Ok(self.take(1)?[0]) }
+    fn u32(&mut self) -> Result<u32, VerifyError> {
+        Ok(u32::from_be_bytes(self.array()?))
+    }
+    fn u64(&mut self) -> Result<u64, VerifyError> {
+        Ok(u64::from_be_bytes(self.array()?))
+    }
+    fn array<const N: usize>(&mut self) -> Result<[u8; N], VerifyError> {
+        self.take(N)?.try_into().map_err(|_| VerifyError::MalformedWire)
+    }
+    fn string(&mut self, max: usize) -> Result<String, VerifyError> {
+        let count = self.u32()? as usize;
+        if count == 0 || count > max { return Err(VerifyError::MalformedWire); }
+        let s = std::str::from_utf8(self.take(count)?)
+            .map_err(|_| VerifyError::MalformedWire)?;
+        if !valid_token(s, 1, max) { return Err(VerifyError::MalformedWire); }
+        Ok(s.to_owned())
+    }
+    fn optional_revision(&mut self) -> Result<Option<String>, VerifyError> {
+        match self.byte()? {
+            0 => Ok(None),
+            1 => {
+                let s = self.string(67)?;
+                if !valid_revision(&s) { return Err(VerifyError::MalformedWire); }
+                Ok(Some(s))
+            }
+            _ => Err(VerifyError::MalformedWire),
+        }
+    }
+    fn end(&self) -> bool { self.pos == self.bytes.len() }
+}
+
+impl AuthorizationStatement {
+    /// Decode externally supplied canonical bytes. Malformed lengths,
+    /// unrecognized versions/domains and trailing extra fields fail closed.
+    /// A raw signed JSON boolean can never be interpreted as authorization.
+    pub fn decode_canonical(wire: &[u8]) -> Result<Self, VerifyError> {
+        if wire.len() > MAX_AUTH_BYTES || wire.len() < AUTH_DOMAIN.len() + 8
+            || !wire.starts_with(AUTH_DOMAIN)
+        {
+            return Err(VerifyError::MalformedWire);
+        }
+        let mut container = Decoder::new(&wire[AUTH_DOMAIN.len()..]);
+        let size = container.u64()?;
+        if size != (wire.len() - AUTH_DOMAIN.len() - 8) as u64 {
+            // An extra suffix, misleading field length or alternate framing
+            // cannot be reinterpreted as an independently signed statement.
+            return Err(VerifyError::NonCanonical);
+        }
+        let body = container.take(size as usize)?;
+        if !container.end() { return Err(VerifyError::NonCanonical); }
+        let mut d = Decoder::new(body);
+        let audience = d.string(128)?;
+        let issuer_key_id = d.string(128)?;
+        let issuer_key_version = d.u64()?;
+        let algorithm = d.byte()?;
+        let request_fingerprint = d.array()?;
+        let channel = d.string(128)?;
+        let expected_head = d.optional_revision()?;
+        let candidate = d.string(67)?;
+        if !valid_revision(&candidate) { return Err(VerifyError::MalformedWire); }
+        let policy_id = d.string(128)?;
+        let policy_digest = d.array()?;
+        let policy_epoch = d.u64()?;
+        let evidence_digest = d.array()?;
+        let key_epoch = d.u64()?;
+        let revocation_epoch = d.u64()?;
+        let role = match d.byte()? {
+            1 => Role::Agent,
+            2 => Role::Reviewer,
+            _ => return Err(VerifyError::MalformedWire),
+        };
+        let decision = d.byte()?;
+        let nonce = d.array()?;
+        let issued_at = d.u64()?;
+        let expires_at = d.u64()?;
+        if !d.end() { return Err(VerifyError::NonCanonical); }
+        let decoded = Self {
+            audience,
+            issuer_key_id,
+            issuer_key_version,
+            algorithm,
+            request_fingerprint,
+            channel,
+            expected_head,
+            candidate,
+            policy_id,
+            policy_digest,
+            policy_epoch,
+            evidence_digest,
+            key_epoch,
+            revocation_epoch,
+            role,
+            decision,
+            nonce,
+            issued_at,
+            expires_at,
+        };
+        if decoded.encode_canonical() != wire {
+            return Err(VerifyError::NonCanonical);
+        }
+        Ok(decoded)
+    }
+}
+
+/// Checks a NEW promotion approval. This function is stateless and never
+/// moves heads or consumes nonces: the future single-owner authority must
+/// repeat nonce/epoch/idempotency checks inside its atomic transaction.
+///
+/// An already durably accepted idempotent retry is NOT passed here after
+/// issuer revocation. It is recovered separately from an authenticated,
+/// integrity-checked durable receipt (SPEC-004 PROM-019).
 pub fn verify_new_authorization(
-    _request: &PromotionRequest,
-    _signed: &SignedAuthorization,
-    _trust: &TrustView<'_>,
+    request: &PromotionRequest,
+    signed: &SignedAuthorization,
+    trust: &TrustView<'_>,
 ) -> Result<VerifiedApproval, VerifyError> {
-    Err(VerifyError::NotImplemented)
+    // The subject is resolved by a trusted transport, not request fields.
+    let fingerprint = request.fingerprint(trust.authenticated_subject)?;
+    let auth = AuthorizationStatement::decode_canonical(&signed.statement_bytes)?;
+
+    // Fixed algorithm allowlist; never allow a peer-chosen fallback.
+    if auth.algorithm != ALG_ED25519 {
+        return Err(VerifyError::WrongAlgorithm);
+    }
+    let issuer = trust.issuers.iter()
+        .find(|key| key.key_id == auth.issuer_key_id
+            && key.key_version == auth.issuer_key_version)
+        .ok_or(VerifyError::UntrustedIssuer)?;
+    let verifying_key = VerifyingKey::from_bytes(&issuer.public_key)
+        .map_err(|_| VerifyError::UntrustedIssuer)?;
+    let signature = Signature::from_bytes(&signed.signature);
+    verifying_key.verify_strict(&signed.statement_bytes, &signature)
+        .map_err(|_| VerifyError::InvalidSignature)?;
+
+    // Check every signed approval field against the server-derived request
+    // fingerprint AND the individually decoded fields. No stale binding,
+    // "passed=true", actor claim or wrong audience can authorize promotion.
+    if auth.audience != trust.audience
+        || auth.request_fingerprint != fingerprint
+        || auth.channel != request.channel
+        || auth.expected_head != request.expected_head
+        || auth.candidate != request.candidate
+        || auth.policy_id != request.policy_id
+        || auth.policy_digest != request.policy_digest
+        || auth.policy_epoch != request.policy_epoch
+        || auth.evidence_digest != request.evidence_digest
+    {
+        return Err(VerifyError::ScopeMismatch);
+    }
+    if !valid_token(trust.audience, 1, 128)
+        || request.channel != trust.policy.channel
+        || request.policy_id != trust.policy.policy_id
+        || request.policy_digest != trust.policy.policy_digest
+        || request.policy_epoch != trust.policy.policy_epoch
+    {
+        return Err(VerifyError::PolicyStale);
+    }
+    if auth.decision != DECISION_ALLOW { return Err(VerifyError::DecisionDenied); }
+    if auth.role != Role::Reviewer || issuer.role != Role::Reviewer {
+        return Err(VerifyError::RoleDenied);
+    }
+    if !valid_token(&issuer.principal_id, 1, 128)
+        || issuer.principal_id == trust.authenticated_subject
+    {
+        return Err(VerifyError::SeparationOfDuties);
+    }
+
+    let now = trust.now.ok_or(VerifyError::TimeUnavailable)?;
+    let revocation = trust.revocation.ok_or(VerifyError::RevocationUnknown)?;
+    if revocation.fresh_until < now {
+        return Err(VerifyError::RevocationUnknown);
+    }
+    if auth.key_epoch != issuer.key_epoch
+        || auth.revocation_epoch != revocation.epoch
+    {
+        return Err(VerifyError::EpochStale);
+    }
+    if issuer.revoked || now < issuer.active_from || now > issuer.active_until {
+        return Err(VerifyError::KeyRevoked);
+    }
+    if auth.issued_at > now { return Err(VerifyError::NotYetValid); }
+    if auth.expires_at < now
+        || auth.expires_at <= auth.issued_at
+        || auth.expires_at - auth.issued_at > MAX_AUTH_TTL_SECONDS
+    {
+        return Err(VerifyError::Expired);
+    }
+    // Nonce collision screening is read-only. Authority transaction must
+    // recheck against authoritative used_nonces immediately before commit.
+    if trust.used_nonces.contains(&NonceKey {
+        issuer_key_id: issuer.key_id.clone(),
+        nonce: auth.nonce,
+    }) {
+        return Err(VerifyError::NonceReplay);
+    }
+    Ok(VerifiedApproval {
+        fingerprint,
+        issuer_key_id: issuer.key_id.clone(),
+        issuer_key_version: issuer.key_version,
+        nonce: auth.nonce,
+        policy_epoch: auth.policy_epoch,
+        key_epoch: auth.key_epoch,
+        revocation_epoch: auth.revocation_epoch,
+    })
 }
