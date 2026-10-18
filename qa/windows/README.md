@@ -32,7 +32,7 @@ Get-Content -Raw (Join-Path $evidence 'summary.json')
 Get-ChildItem $evidence | Select-Object Name, Length
 ```
 
-**Expected RED gates on the existing source:** Windows metadata/marker/object permission checks are currently Unix-gated in the Rust code. The script verifies that an `Everyone:Modify` ACE on private store metadata, format marker or blob is rejected. Until FOSS-484 implements protected Windows DACL creation and validation, those tests are expected to fail; **do not waive or record PASS**. Junction/reparse, path traversal, no-overwrite concurrency, bytewise snapshot restore and raw NTFS DACL evidence are also checked.
+**Implemented but unverified:** FOSS-484 now creates protected DACLs on Windows and inspects them when reopening metadata and CAS paths. The native script independently verifies initial owner, DACL protection, the three expected full-control allow ACEs, and denial after injecting `Everyone:Modify` on metadata, marker, CAS root, object shard and blob. It also exercises junction rejection, Windows reserved device names, case-insensitive snapshot collisions, traversal denial, snapshot materialization and 20-way no-overwrite contention. No passing Windows result exists until the script actually runs on an NTFS workstation, its raw artifacts are inspected and an independent reviewer signs off. If a check fails, **do not waive it**.
 
 The script does **not** instrument Windows process crashes at exact publication boundaries, emulate power loss, attest reviewer independence, or validate ReFS/SMB. Those are separate release gates. It exits nonzero if any observed case fails or cannot run, and stores per-command raw output, error logs and hashes. An exit-zero script is never itself an independent security review.
 
