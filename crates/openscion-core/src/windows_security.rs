@@ -135,7 +135,7 @@ fn invalid_acl() -> io::Error {
 fn wide(text: &OsStr) -> Vec<u16> {
     text.encode_wide().chain(Some(0)).collect()
 }
-fn path_wide(path: &Path) -> io::Result<Vec<u16>> {
+pub(crate) fn path_wide(path: &Path) -> io::Result<Vec<u16>> {
     let encoded = wide(path.as_os_str());
     if encoded.len() > 32767 || encoded[..encoded.len() - 1].contains(&0) {
         return Err(io::Error::new(
