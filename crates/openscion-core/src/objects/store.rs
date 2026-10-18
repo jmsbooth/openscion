@@ -362,11 +362,20 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
         return Ok(());
     }
     let error = std::io::Error::last_os_error();
-    if error.kind() == ErrorKind::AlreadyExists {
-        return Err(ObjectError::new(
-            ObjectErrorKind::AlreadyExists,
-            "materialization destination already exists",
-        ));
+    // Windows may return access-denied for an existing directory, rather
+    // than already-exists. Only normalize if the destination really exists.
+    if error.kind() == ErrorKind::AlreadyExists
+        || matches!(error.raw_os_error(), Some(5 | 80 | 183))
+    {
+        if let Ok(attributes) = fs::symlink_metadata(target) {
+            if is_link_like(&attributes) {
+                return Err(unsafe_path());
+            }
+            return Err(ObjectError::new(
+                ObjectErrorKind::AlreadyExists,
+                "materialization destination already exists",
+            ));
+        }
     }
     Err(ObjectError::io(
         "publish directory without overwrite",
@@ -376,13 +385,13 @@ fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), Objec
 
 #[cfg(windows)]
 fn publish_directory_noreplace(source: &Path, target: &Path) -> Result<(), ObjectError> {
-    use std::os::windows::ffi::OsStrExt;
     #[link(name = "kernel32")]
     extern "system" {
         fn MoveFileW(existing_name: *const u16, new_name: *const u16) -> i32;
     }
-    let source_wide: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
-    let target_wide: Vec<u16> = target.as_os_str().encode_wide().chain(Some(0)).collect();
+    // Validate NULs and Win32 path length before publication to avoid truncation.
+    let source_wide = crate::windows_security::path_wide(source).map_err(|_| unsafe_path())?;
+    let target_wide = crate::windows_security::path_wide(target).map_err(|_| unsafe_path())?;
     // SAFETY: Both terminated UTF-16 buffers remain allocated throughout
     // the synchronous Win32 call. MoveFileW refuses existing destinations.
     let result = unsafe { MoveFileW(source_wide.as_ptr(), target_wide.as_ptr()) };
