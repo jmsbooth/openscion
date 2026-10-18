@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+from types import SimpleNamespace
 
 TARGET = pathlib.Path(__file__).with_name('m1_q2_crash.py')
 spec = importlib.util.spec_from_file_location('q2crash', TARGET)
@@ -80,6 +81,55 @@ class CrashQualificationContract(unittest.TestCase):
                 self.skipTest('symlink creation unavailable')
             with self.assertRaisesRegex(crash.Blocked,'reparse point'):
                 crash.reject_linked_ancestors(link / 'artifact')
+
+    def test_observational_subprocess_recovery_on_fake_cli(self):
+        # Tests the harness state machine, NOT Win32 or production OpenScion.
+        if sys.platform == 'win32':
+            self.skipTest('POSIX fake CLI exercise only')
+        with tempfile.TemporaryDirectory() as tmp:
+            root=pathlib.Path(tmp)
+            repo=root/'checkout';repo.mkdir()
+            for cmd in (["git", "init", "-q"],
+                        ["git", "config", "user.email", "qa@example.invalid"],
+                        ["git", "config", "user.name", "QA"]):
+                subprocess.run(cmd, cwd=repo, check=True)
+            (repo/'.gitignore').write_text('target/\n')
+            subprocess.run(['git','add','.gitignore'],cwd=repo,check=True)
+            subprocess.run(['git','commit','-qm','fixture'],cwd=repo,check=True)
+            sha=subprocess.run(['git','rev-parse','HEAD'],cwd=repo,check=True,capture_output=True,text=True).stdout.strip()
+            binary=repo/'target/debug/openscion.exe';binary.parent.mkdir(parents=True)
+            fake="""#!/usr/bin/env python3
+import hashlib,json,sys,time
+from pathlib import Path
+args=sys.argv[1:]
+if args[0]=='init':
+    (Path(args[-1])/'.openscion').mkdir()
+    print(json.dumps({'ok':True,'command':'init'}))
+elif args[:2]==['blob','put']:
+    repo=Path(args[-2]);data=(repo/args[-1]).read_bytes()
+    time.sleep(0.020)
+    id='b1_'+hashlib.sha256(data).hexdigest()
+    (repo/'.openscion'/id).write_bytes(data)
+    print(json.dumps({'ok':True,'command':'blob put','id':id}))
+elif args[:2]==['blob','verify']:
+    repo=Path(args[-2]);id=args[-1]
+    data=(repo/'.openscion'/id).read_bytes()
+    assert hashlib.sha256(data).hexdigest()==id[3:]
+    print(json.dumps({'ok':True,'command':'blob verify','id':id,'bytes':len(data)}))
+else:
+    sys.exit(2)
+"""
+            binary.write_text(fake)
+            binary.chmod(0o755)
+            args=SimpleNamespace(expected_sha=sha,attempts=8)
+            with mock.patch.object(crash,'preflight',return_value=(repo,binary,root/'evidence',root/'fixture')):
+                result=crash.run(args)
+            self.assertEqual(result['attempts'],8)
+            self.assertGreater(result['interrupted_count'],0)
+            self.assertFalse(result['boundary_injection'])
+            self.assertFalse(result['power_loss_verified'])
+            self.assertTrue(all(o['retry_verified'] for o in result['observations']))
+            self.assertTrue((root/'evidence'/'summary.json').exists())
 
     def test_full_cli_argv_has_no_shell(self):
         src=TARGET.read_text(encoding='utf-8')
