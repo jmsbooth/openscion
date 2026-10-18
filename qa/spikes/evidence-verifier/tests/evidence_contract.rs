@@ -450,3 +450,36 @@ fn distinct_version_during_key_rotation_does_not_override_pinned_key() {
     f.issuers.push(old_key);
     assert!(f.verify().is_ok(), "the exact signed key version must be used");
 }
+
+#[test]
+fn all_truncations_of_signed_canonical_wire_fail_without_panicking() {
+    let f = Fixture::new();
+    for len in 0..f.signed.statement_bytes.len() {
+        let mut changed = f.signed.clone();
+        changed.statement_bytes.truncate(len);
+        assert!(
+            verify_new_authorization(&f.request, &changed, &f.view()).is_err(),
+            "truncated signed authorization of length {len} must not verify"
+        );
+    }
+}
+
+#[test]
+fn each_single_byte_signed_wire_mutation_fails_without_panicking() {
+    let f = Fixture::new();
+    for offset in 0..f.signed.statement_bytes.len() {
+        let mut changed = f.signed.clone();
+        changed.statement_bytes[offset] ^= 1;
+        assert!(
+            verify_new_authorization(&f.request, &changed, &f.view()).is_err(),
+            "tampering at offset {offset} must not verify"
+        );
+    }
+}
+
+#[test]
+fn oversized_authorization_wire_is_rejected_before_parsing() {
+    let mut f = Fixture::new();
+    f.signed.statement_bytes = vec![0; MAX_AUTH_BYTES + 1];
+    f.reject(VerifyError::MalformedWire);
+}
