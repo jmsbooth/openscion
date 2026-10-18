@@ -116,24 +116,59 @@ function Test-DACL {
 }
 function Invoke-Racing {
     param([string]$Name,[string[]]$Arguments,[int]$Count)
+    # Drain stdout and stderr asynchronously before waiting. Synchronous
+    # ReadToEnd can block forever if a child hangs or fills the other pipe.
     $processes = @()
-    for ($i=0; $i -lt $Count; $i++) {
-        $info = [Diagnostics.ProcessStartInfo]::new($Bin)
-        $info.UseShellExecute = $false
-        $info.RedirectStandardOutput = $true
-        $info.RedirectStandardError = $true
-        foreach($argument in $Arguments) { [void]$info.ArgumentList.Add($argument) }
-        $processes += [Diagnostics.Process]::Start($info)
-    }
     $outcomes = @()
-    foreach ($p in $processes) {
-        $stdout = $p.StandardOutput.ReadToEnd()
-        $stderr = $p.StandardError.ReadToEnd()
-        if (-not $p.WaitForExit(30000)) { $p.Kill($true); throw 'Concurrent process timed out' }
-        $outcomes += [pscustomobject]@{ ExitCode=$p.ExitCode; Stdout=$stdout; Stderr=$stderr }
-        $p.Dispose()
+    $deadline = [Diagnostics.Stopwatch]::StartNew()
+    try {
+        for ($i=0; $i -lt $Count; $i++) {
+            $info = [Diagnostics.ProcessStartInfo]::new($Bin)
+            $info.UseShellExecute = $false
+            $info.RedirectStandardOutput = $true
+            $info.RedirectStandardError = $true
+            foreach ($argument in $Arguments) { [void]$info.ArgumentList.Add($argument) }
+            $p = [Diagnostics.Process]::Start($info)
+            if ($null -eq $p) { throw 'Concurrent process failed to start' }
+            $processes += [pscustomobject]@{
+                Process=$p
+                StdoutTask=$p.StandardOutput.ReadToEndAsync()
+                StderrTask=$p.StandardError.ReadToEndAsync()
+            }
+        }
+        # One deadline for the entire operation, not Count times 30 seconds.
+        foreach ($entry in $processes) {
+            $p = $entry.Process
+            $remaining = [int][Math]::Max(0, [Math]::Ceiling(30000 - $deadline.Elapsed.TotalMilliseconds))
+            if (-not $p.WaitForExit($remaining)) {
+                throw "Concurrent process exceeded 30-second global deadline (PID=$($p.Id))"
+            }
+            $stdout = $entry.StdoutTask.GetAwaiter().GetResult()
+            $stderr = $entry.StderrTask.GetAwaiter().GetResult()
+            if ($stdout.Length -gt 1048576 -or $stderr.Length -gt 1048576) {
+                throw "Concurrent process output exceeded 1 MiB per stream (PID=$($p.Id))"
+            }
+            $outcomes += [pscustomobject]@{
+                ExitCode=$p.ExitCode; Stdout=$stdout; Stderr=$stderr; Pid=$p.Id
+            }
+        }
+    } finally {
+        foreach ($entry in $processes) {
+            $p = $entry.Process
+            try {
+                if (-not $p.HasExited) {
+                    $p.Kill($true)
+                    [void]$p.WaitForExit(5000)
+                }
+            } catch {
+                $script:Failures.Add('concurrent-process-cleanup')
+            } finally {
+                $p.Dispose()
+            }
+        }
+        # Preserve successful child observations even when another child times out.
+        @($outcomes) | ConvertTo-Json -Depth 5 | Out-File -LiteralPath (Join-Path $Artifacts ($Name+'.json'))
     }
-    $outcomes | ConvertTo-Json -Depth 5 | Out-File -LiteralPath (Join-Path $Artifacts ($Name+'.json'))
     return ,$outcomes
 }
 try {
