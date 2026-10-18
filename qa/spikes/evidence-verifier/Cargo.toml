@@ -1,0 +1,17 @@
+[package]
+name = "openscion-evidence-verifier-lab"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.85"
+publish = false
+license = "MIT"
+description = "Isolated, non-production SDD/TDD experiment for independent authorization verification"
+
+[workspace]
+
+[dependencies]
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std"] }
+sha2 = "=0.10.9"
+
+[dev-dependencies]
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["std"] }
