@@ -16,6 +16,21 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
+// Deliberately compiled out of every default source-control binary.
+// The only nondefault implementation records a marker, then blocks until
+// a test controller terminates its disposable process.
+#[cfg(feature = "qa-fault-injection")]
+macro_rules! qa_cutpoint {
+    ($point:literal) => {{
+        super::fault::checkpoint($point)
+            .map_err(|error| ObjectError::io("QA checkpoint", error))?;
+    }};
+}
+#[cfg(not(feature = "qa-fault-injection"))]
+macro_rules! qa_cutpoint {
+    ($point:literal) => {{}};
+}
+
 /// Validated local repository store. No mutable revision or branch pointers.
 ///
 /// Clone is deliberately not implemented. Sharing with Arc is safe for
@@ -195,9 +210,13 @@ impl ObjectStore {
                 "materialization destination changed during write",
             ));
         }
+        qa_cutpoint!("checkout_before_publish");
         publish_directory_noreplace(&stage_path, &final_path)?;
+        qa_cutpoint!("checkout_after_publish");
         guard.0 = None;
+        qa_cutpoint!("checkout_before_parent_sync");
         sync_directory(&safe_parent)?;
+        qa_cutpoint!("checkout_after_parent_sync");
         Ok(())
     }
 
@@ -228,12 +247,15 @@ impl ObjectStore {
         let mut cleanup = FileCleanup(Some(staging.clone()));
         file.write_all(bytes)
             .map_err(|error| ObjectError::io("write staging object", error))?;
+        qa_cutpoint!("object_before_stage_fsync");
         file.sync_all()
             .map_err(|error| ObjectError::io("sync staging object", error))?;
+        qa_cutpoint!("object_after_stage_fsync");
         drop(file);
 
         // Atomic no-overwrite publication on the same filesystem. A normal
         // rename may replace an existing object and is deliberately not used.
+        qa_cutpoint!("object_before_publish");
         match fs::hard_link(&staging, &path) {
             Ok(()) => {}
             Err(error) if error.kind() == ErrorKind::AlreadyExists => {
@@ -241,10 +263,15 @@ impl ObjectStore {
             }
             Err(error) => return Err(ObjectError::io("publish immutable object", error)),
         }
+        qa_cutpoint!("object_after_publish");
+        qa_cutpoint!("object_before_stage_remove");
         fs::remove_file(&staging)
             .map_err(|error| ObjectError::io("remove temporary object", error))?;
+        qa_cutpoint!("object_after_stage_remove");
         cleanup.0 = None;
+        qa_cutpoint!("object_before_parent_sync");
         sync_directory(parent)?;
+        qa_cutpoint!("object_after_parent_sync");
         Ok(id)
     }
 

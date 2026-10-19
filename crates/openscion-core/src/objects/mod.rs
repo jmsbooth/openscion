@@ -3,6 +3,13 @@
 //! Only blobs and canonical path snapshots exist in v1. This is not a
 //! revision system, authorization service or provenance mechanism.
 
+// A security-sensitive checkpoint path exists only in an explicitly built
+// debug/QA executable and is rejected by release/profile builds.
+#[cfg(all(feature = "qa-fault-injection", not(debug_assertions)))]
+compile_error!("qa-fault-injection is forbidden when debug_assertions are disabled");
+
+#[cfg(feature = "qa-fault-injection")]
+mod fault;
 mod identity;
 mod safe_path;
 mod snapshot;
