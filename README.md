@@ -12,6 +12,33 @@ Agentic development needs an explicit lifecycle for immutable candidate revision
 - **M1 increment FOSS-387:** Rust workspace and dependency-free local CLI bootstrap implemented in a feature PR. Implementation is **pending local runtime tests**; no passing Rust test or production security claim is asserted.
 - **M1 next steps:** content-addressed snapshots, revision DAG, gate-bound CAS promotion and forward-only rollback remain unimplemented.
 
+## Stacked M1 increment: FOSS-389 (proposals and revisions)
+
+This branch adds independently authored, immutable change proposals (p1_) and
+unpromoted revisions (r1_) with complete, bounded ancestry verification.
+Every proposal binds a candidate snapshot to a declared intent and actor claim.
+The actor name is **unverified**. A revision links precisely to its proposal,
+parent revision and candidate snapshot; it does not become a protected head.
+
+Development CLI additions (not runtime-qualified):
+
+    openscion proposal create <repo> <root|r1_ID> <s1_ID> <actor-claim> <intent-file>
+    openscion proposal show <repo> <p1_ID>
+    openscion revision create <repo> <p1_ID>
+    openscion revision show <repo> <r1_ID>
+    openscion revision ancestry <repo> <r1_ID>
+
+Intent text is read from a repo-relative UTF-8 file and validated. JSON responses
+escape untrusted text. Revisions have a single parent in protocol v1; merge,
+rebase, protected promotion, trusted identity, signed evidence and rollback
+are not implemented.
+
+The FOSS-389 implementation is **DRAFT / BLOCKED** until its parent PRs pass
+actual Rust, filesystem and security checks. See
+[SPEC-003](docs/specs/SPEC-003-proposals-and-revisions.md),
+[reference vectors](docs/specs/SPEC-003-golden-vectors.json), and the
+[manual qualification procedure](docs/engineering/foss-389-manual-qa.md).
+
 ## Dependent M1 increment: FOSS-388
 
 The stacked FOSS-388 implementation (PR #3) introduces:

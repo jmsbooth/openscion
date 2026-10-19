@@ -61,8 +61,6 @@ impl ObjectStore {
 
     fn verify_snapshot_entries(&self, entries: &[SnapshotEntry]) -> Result<(), ObjectError> {
         let mut aggregate_bytes = 0usize;
-        // Count every *file reference*, not unique object digests: five paths
-        // to the same 16 MiB blob still materialize 80 MiB of files.
         for entry in entries {
             let bytes = self.get_blob(&entry.blob)?;
             aggregate_bytes = aggregate_bytes.checked_add(bytes.len()).ok_or_else(|| {
@@ -201,7 +199,11 @@ impl ObjectStore {
         Ok(())
     }
 
-    fn put_object(&self, kind: ObjectKind, bytes: &[u8]) -> Result<ObjectId, ObjectError> {
+    pub(crate) fn put_object(
+        &self,
+        kind: ObjectKind,
+        bytes: &[u8],
+    ) -> Result<ObjectId, ObjectError> {
         let limit = object_limit(kind);
         if bytes.len() > limit {
             return Err(ObjectError::new(
@@ -259,7 +261,11 @@ impl ObjectStore {
         Ok(())
     }
 
-    fn get_object(&self, id: &ObjectId, required_kind: ObjectKind) -> Result<Vec<u8>, ObjectError> {
+    pub(crate) fn get_object(
+        &self,
+        id: &ObjectId,
+        required_kind: ObjectKind,
+    ) -> Result<Vec<u8>, ObjectError> {
         if id.kind() != required_kind {
             return Err(ObjectError::new(
                 ObjectErrorKind::WrongType,
@@ -427,6 +433,8 @@ fn object_limit(kind: ObjectKind) -> usize {
     match kind {
         ObjectKind::Blob => MAX_BLOB_BYTES,
         ObjectKind::Snapshot => MAX_SNAPSHOT_BYTES,
+        ObjectKind::Proposal => super::changes::MAX_PROPOSAL_BYTES,
+        ObjectKind::Revision => super::changes::MAX_REVISION_BYTES,
     }
 }
 
